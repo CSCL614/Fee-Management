@@ -3,7 +3,7 @@ import Topbar from '../components/common/Topbar';
 import api from '../services/api';
 import { formatCurrency } from '../utils/helpers';
 import toast from 'react-hot-toast';
-import { Plus, BookOpen, Search, X, Edit2, Trash2, Layers, Check } from 'lucide-react';
+import { Plus, BookOpen, Search, X, Edit2, Trash2, Layers, Check, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { pageVariants, modalVariants, backdropVariants } from '../utils/animations';
 
@@ -90,6 +90,8 @@ export default function FeeStructurePage() {
       });
   }, []);
 
+  const [isGeneratingDemo, setIsGeneratingDemo] = useState(false);
+
   // Fetch structures
   const fetchStructures = async () => {
     setLoading(true);
@@ -108,6 +110,26 @@ export default function FeeStructurePage() {
   useEffect(() => {
     fetchStructures();
   }, [filterAY]);
+
+  // Generate / Seed Demo Fee Structures
+  const handleGenerateDemoStructures = async () => {
+    if (!window.confirm('Populate / Refresh DEMO Fee Structures for Academic Year 2026–27 across all 5 catalog courses?\n\nDemo amounts:\n• Tuition Fee: ₹30,000/yr (Annual)\n• UDF Fee: ₹1,000/yr (Annual)\n• Exam Fee: ₹1,000/sem (Semester-wise, ₹2,000/yr)\n• Practical Fee: ₹2,000/sem (Semester-wise, ₹4,000/yr)\n• Admission Fee: ₹2,000 (1st Year only)\n\nNote: These are fictional testing values and will be clearly labelled as DEMO.')) {
+      return;
+    }
+    setIsGeneratingDemo(true);
+    try {
+      toast.loading('Generating 89 demo fee structures for AY 2026–27...', { id: 'demo-seed' });
+      const res = await api.post('/fees/demo-structures', { academicYear: '2026-27' });
+      toast.success(res.data.message || 'Demo fee structures configured successfully!', { id: 'demo-seed' });
+      setFilterAY('2026-27');
+      await fetchStructures();
+    } catch (err) {
+      console.error('Demo structure generation error:', err);
+      toast.error(err.response?.data?.message || 'Failed to generate demo fee structures', { id: 'demo-seed' });
+    } finally {
+      setIsGeneratingDemo(false);
+    }
+  };
 
   // Handle course selection in main form
   const handleCourseChange = (selectedCourseName) => {
@@ -312,7 +334,7 @@ export default function FeeStructurePage() {
             )}
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
             <select
               value={filterAY}
               onChange={(e) => setFilterAY(e.target.value)}
@@ -330,8 +352,21 @@ export default function FeeStructurePage() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
               type="button"
+              disabled={isGeneratingDemo}
+              onClick={handleGenerateDemoStructures}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all shadow-xs cursor-pointer"
+              title="Configure sample demo fee rates for all catalog courses for AY 2026–27"
+            >
+              <Sparkles className={`w-4 h-4 ${isGeneratingDemo ? 'animate-spin' : ''}`} />
+              <span>Generate Demo Structures (2026–27)</span>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
+              type="button"
               onClick={() => setShowForm(!showForm)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-xs"
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-xs cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Add Structure & Terms</span>
@@ -736,6 +771,38 @@ export default function FeeStructurePage() {
           )}
         </AnimatePresence>
 
+        {/* DEMO Disclaimer Banner */}
+        <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0 text-amber-800 font-bold text-xs mt-0.5">
+              DEMO
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                  Demo Fee Structures Active (Academic Year 2026–27)
+                </h4>
+                <span className="px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 text-[10px] font-bold">
+                  TESTING DATA
+                </span>
+              </div>
+              <p className="text-xs text-amber-900/90 mt-0.5 leading-relaxed">
+                Illustrative sample amounts: <strong>Tuition Fee</strong> ₹30,000/yr (Annual) · <strong>UDF Fee</strong> ₹1,000/yr (Annual) · <strong>Exam Fee</strong> ₹1,000/sem (Semester-wise, ₹2,000/yr) · <strong>Practical Fee</strong> ₹2,000/sem (Semester-wise, ₹4,000/yr) · <strong>Admission Fee</strong> ₹2,000 (1st Year only). Fictional values for Excel import verification; not approved college fees.
+              </p>
+            </div>
+          </div>
+          <div className="shrink-0 flex items-center gap-2 self-end sm:self-auto">
+            <button
+              onClick={handleGenerateDemoStructures}
+              disabled={isGeneratingDemo}
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingDemo ? 'animate-spin' : ''}`} />
+              <span>Reset Demo Rates</span>
+            </button>
+          </div>
+        </div>
+
         {/* Results Counter */}
         {!loading && (
           <div className="flex items-center justify-between text-xs text-gray-500 font-medium px-1">
@@ -762,104 +829,119 @@ export default function FeeStructurePage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredGroups.map((g, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:border-gray-200 transition-all">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 border-b border-gray-50 pb-3 gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-gray-800 text-base">
-                        {g.course}
-                      </h3>
-                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${g.level === 'PG' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>
-                        {g.level}
-                      </span>
-                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                        {g.year}
-                      </span>
-                      <span className="text-xs text-gray-500 font-medium">
-                        ({g.academicYear})
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {g.items.length} term{g.items.length === 1 ? '' : 's'} / fee components configured
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3 self-end sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setQuickAddModal(g);
-                        setQuickTerm({ category: '', amount: '', frequency: 'ANNUAL', semester: '' });
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-navy-50 hover:bg-navy-100 text-navy-700 text-xs font-semibold rounded-lg transition-colors"
-                      title="Add a new term and price to this structure"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Term</span>
-                    </button>
-
-                    <div className="text-right">
-                      <span className="text-[11px] text-gray-400 block leading-none">Total Program Fee</span>
-                      <p className="text-base font-bold text-navy-800 mt-0.5">
-                        {formatCurrency(g.items.reduce((s, item) => s + item.amount, 0))}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {g.items.map((item) => (
-                    <div
-                      key={item.feeId}
-                      className="flex flex-col justify-between text-sm p-3.5 bg-gray-50/80 rounded-xl group hover:bg-gray-100/80 border border-gray-100 transition-colors gap-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-gray-800 font-semibold">{item.category}</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-navy-900">{formatCurrency(item.amount)}</span>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingItem(item);
-                                setEditAmount(item.amount.toString());
-                              }}
-                              title="Edit price"
-                              className="p-1 text-gray-400 hover:text-navy-600 rounded transition-colors"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(item)}
-                              title="Delete term"
-                              className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
-                        <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
-                          {item.frequency || 'ANNUAL'}
+            {filteredGroups.map((g, i) => {
+              const hasDemoItems = g.items.some(item => item.isDemo);
+              return (
+                <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:border-gray-200 transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 border-b border-gray-50 pb-3 gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-gray-800 text-base">
+                          {g.course}
+                        </h3>
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${g.level === 'PG' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>
+                          {g.level}
                         </span>
-                        {item.semester && (
-                          <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">
-                            {item.semester}
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                          {g.year}
+                        </span>
+                        <span className="text-xs text-gray-500 font-medium">
+                          ({g.academicYear})
+                        </span>
+                        {hasDemoItems && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            DEMO DATA
                           </span>
                         )}
-                        <span className="text-[11px] text-gray-400 font-mono ml-auto">
-                          {item.feeId}
-                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {g.items.length} term{g.items.length === 1 ? '' : 's'} / fee components configured
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuickAddModal(g);
+                          setQuickTerm({ category: '', amount: '', frequency: 'ANNUAL', semester: '' });
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-navy-50 hover:bg-navy-100 text-navy-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                        title="Add a new term and price to this structure"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Term</span>
+                      </button>
+
+                      <div className="text-right">
+                        <span className="text-[11px] text-gray-400 block leading-none">Total Program Fee</span>
+                        <p className="text-base font-bold text-navy-800 mt-0.5">
+                          {formatCurrency(g.items.reduce((s, item) => s + item.amount, 0))}
+                        </p>
                       </div>
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {g.items.map((item) => (
+                      <div
+                        key={item.feeId}
+                        className="flex flex-col justify-between text-sm p-3.5 bg-gray-50/80 rounded-xl group hover:bg-gray-100/80 border border-gray-100 transition-colors gap-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-gray-800 font-semibold">{item.category}</span>
+                            {item.isDemo && (
+                              <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                DEMO
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-navy-900">{formatCurrency(item.amount)}</span>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingItem(item);
+                                  setEditAmount(item.amount.toString());
+                                }}
+                                title="Edit price"
+                                className="p-1 text-gray-400 hover:text-navy-600 rounded transition-colors"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(item)}
+                                title="Delete term"
+                                className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                          <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
+                            {item.frequency || 'ANNUAL'}
+                          </span>
+                          {item.semester && (
+                            <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-medium">
+                              {item.semester}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-gray-400 font-mono ml-auto">
+                            {item.feeId}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </motion.div>

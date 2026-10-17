@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertTriangle,
   XCircle, ArrowRight, RotateCcw, ShieldCheck, Check, Info, FileText,
-  AlertCircle, Users, ExternalLink, RefreshCw, ChevronRight, HelpCircle
+  AlertCircle, Users, ExternalLink, RefreshCw, ChevronRight, HelpCircle, Sparkles
 } from 'lucide-react';
 import { formatCurrency } from '../utils/helpers';
 import { pageVariants, fadeInUp } from '../utils/animations';
@@ -22,6 +22,7 @@ export default function ImportStudentsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [importMode, setImportMode] = useState('valid_only'); // 'valid_only' | 'all_or_nothing'
   const [importPayments, setImportPayments] = useState(false);
+  const [isRevalidating, setIsRevalidating] = useState(false);
 
   // Preview data
   const [previewData, setPreviewData] = useState(null);
@@ -108,6 +109,45 @@ export default function ImportStudentsPage() {
       console.error('Preview error:', err);
       toast.error(err.response?.data?.message || 'Error parsing workbook. Please check file format.');
       setStep('upload');
+    }
+  };
+
+  // Revalidate without file re-upload
+  const handleRevalidate = async () => {
+    if (!selectedFile) return;
+    setIsRevalidating(true);
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const res = await api.post('/imports/preview', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (res.data.success) {
+        setPreviewData(res.data.data);
+        toast.success(`Revalidation complete: ${res.data.data.validCount} valid, ${res.data.data.discrepancyCount} discrepancy notes.`);
+      } else {
+        toast.error(res.data.message || 'Revalidation failed');
+      }
+    } catch (err) {
+      console.error('Revalidation error:', err);
+      toast.error('Revalidation failed. Please check backend connection.');
+    } finally {
+      setIsRevalidating(false);
+    }
+  };
+
+  // Quick Seed Demo Fee Structures and Revalidate
+  const handleQuickSeedDemoStructures = async () => {
+    try {
+      toast.loading('Configuring 89 demo fee structures for AY 2026–27...', { id: 'quick-demo' });
+      await api.post('/fees/demo-structures', { academicYear: '2026-27' });
+      toast.success('Configured demo fee structures for all 5 courses!', { id: 'quick-demo' });
+      await handleRevalidate();
+    } catch (err) {
+      console.error('Quick seed demo error:', err);
+      toast.error('Failed to configure demo fee structures', { id: 'quick-demo' });
     }
   };
 
@@ -473,12 +513,72 @@ export default function ImportStudentsPage() {
               </div>
             </div>
 
-            {/* Discrepancy / Policy Warning Banner */}
-            {previewData.discrepancyCount > 0 && (
-              <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-4 flex items-start gap-3">
-                <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-                <div className="text-xs text-amber-900 leading-relaxed">
-                  <span className="font-bold">Fee Structure Discrepancies Detected:</span> Some rows have fee categories or amounts that are unconfigured in MongoDB Fee Structure for Academic Year 2026-27. In accordance with college business rules, <strong>no fake fee assessments will be fabricated</strong>. Students will be enrolled, and fee demands will be linked to whatever active Fee Structures exist.
+            {/* Discrepancy & Verification Status Banner */}
+            {previewData.discrepancyCount > 0 ? (
+              <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                  <div className="text-xs text-amber-900 leading-relaxed">
+                    <span className="font-bold">Fee Structure Discrepancies Detected ({previewData.discrepancyCount} rows):</span>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      Some rows contain fee categories or amounts unconfigured in MongoDB for AY 2026–27. Per college accounting rules, <strong>no fabricated fee assessments are created</strong>. Balances will be derived strictly from official MongoDB fee demands and recorded payments.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
+                  <button
+                    onClick={handleQuickSeedDemoStructures}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition-colors cursor-pointer"
+                    title="Generate standard demo fee structures for AY 2026-27 and revalidate"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Apply Demo Rates & Revalidate</span>
+                  </button>
+                  <button
+                    onClick={() => navigate('/fee-structure')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-colors cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Fee Structures</span>
+                  </button>
+                  <button
+                    onClick={handleRevalidate}
+                    disabled={isRevalidating}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRevalidating ? 'animate-spin' : ''}`} />
+                    <span>Revalidate</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-emerald-50 border border-emerald-200/90 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+                  <div className="text-xs text-emerald-900 leading-relaxed">
+                    <span className="font-bold">All Student Records & Fee Structures Verified:</span>
+                    <p className="text-[11px] text-emerald-800 mt-0.5">
+                      Every row maps cleanly to active MongoDB Fee Structures for AY 2026–27. Official fee demands will be automatically generated upon import.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                  <button
+                    onClick={handleRevalidate}
+                    disabled={isRevalidating}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Re-run validation against database"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRevalidating ? 'animate-spin' : ''}`} />
+                    <span>{isRevalidating ? 'Revalidating...' : 'Revalidate Live'}</span>
+                  </button>
+                  <button
+                    onClick={() => navigate('/fee-structure')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 transition-colors cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Fee Structures</span>
+                  </button>
                 </div>
               </div>
             )}
@@ -529,14 +629,26 @@ export default function ImportStudentsPage() {
                   </button>
                 </div>
 
-                <div className="relative w-full sm:w-64">
-                  <input
-                    type="text"
-                    placeholder="Filter preview rows..."
-                    value={searchFilter}
-                    onChange={(e) => setSearchFilter(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                  />
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={handleRevalidate}
+                    disabled={isRevalidating}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                    title="Revalidate preview against the latest MongoDB Fee Structures"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRevalidating ? 'animate-spin' : ''}`} />
+                    <span>{isRevalidating ? 'Revalidating...' : 'Revalidate'}</span>
+                  </button>
+
+                  <div className="relative w-full sm:w-64">
+                    <input
+                      type="text"
+                      placeholder="Filter preview rows..."
+                      value={searchFilter}
+                      onChange={(e) => setSearchFilter(e.target.value)}
+                      className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -621,12 +733,26 @@ export default function ImportStudentsPage() {
                             </div>
                           ))}
                           {item.errors.length === 0 && item.warnings.length === 0 && (
-                            <span className="text-[11px] text-emerald-600">All fields verified</span>
+                            <div className="space-y-0.5">
+                              <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-600" /> All fields verified
+                              </span>
+                              {item.feeComparison?.matchingStructuresCount > 0 && (
+                                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium border border-blue-100">
+                                  Matched {item.feeComparison.matchingStructuresCount} demo terms ({formatCurrency(item.feeComparison.backendStructureTotal)})
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
                         <td className="py-3 px-3 text-right font-mono font-bold text-slate-800 whitespace-nowrap">
-                          {formatCurrency(item.data.totalFees)}
-                          <span className="block text-[10px] font-normal text-slate-400">
+                          <div title="Excel Reference Total Fees">{formatCurrency(item.data.totalFees)}</div>
+                          {item.feeComparison?.backendStructureTotal > 0 && (
+                            <span className="block text-[10px] font-normal text-emerald-600" title="Configured Fee Assessment Demand">
+                              Demand: {formatCurrency(item.feeComparison.backendStructureTotal)}
+                            </span>
+                          )}
+                          <span className="block text-[10px] font-normal text-slate-400" title="Excel Reference Total Paid">
                             Paid: {formatCurrency(item.data.totalPaid)}
                           </span>
                         </td>

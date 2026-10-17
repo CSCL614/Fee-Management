@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard, Users, CreditCard, History, BookOpen, FileText,
   AlertCircle, Settings, Shield, UserCog, LogOut, ChevronLeft,
-  ChevronRight, GraduationCap, Menu, X
+  ChevronRight, GraduationCap, Menu, X, FileSpreadsheet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CollegeLogo from './CollegeLogo';

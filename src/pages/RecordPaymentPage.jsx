@@ -2,10 +2,15 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Topbar from '../components/common/Topbar';
 import api from '../services/api';
-import { formatCurrency, getStatusColor } from '../utils/helpers';
-import { motion } from 'framer-motion';
+import { formatCurrency, getStatusColor, formatDate } from '../utils/helpers';
+import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Search, CreditCard, CheckCircle } from 'lucide-react';
+import {
+  ArrowLeft, Search, CreditCard, CheckCircle2, User,
+  Calendar, Hash, Receipt, Printer, RefreshCw, AlertCircle,
+  FileText, ShieldCheck, Lock, Clock, ChevronRight, Loader2
+} from 'lucide-react';
+import { triggerPaymentConfetti, AnimatedCheckmark, pageVariants } from '../utils/animations';
 
 export default function RecordPaymentPage() {
   const [searchParams] = useSearchParams();
@@ -90,47 +95,127 @@ export default function RecordPaymentPage() {
         remarks: form.remarks
       });
       setSuccess(res.data.data);
+      triggerPaymentConfetti();
       toast.success('Payment recorded successfully!');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Payment failed');
+      toast.error(err.response?.data?.message || 'Payment recording failed');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Success screen
+  // Payment Confirmation Success Screen
   if (success) {
     const payment = success.payment;
     const summary = success.feeSummary;
     return (
       <div>
         <Topbar title="Payment Recorded" />
-        <div className="p-6">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-lg mx-auto bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
-            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-10 h-10 text-emerald-600" />
+        <div className="p-4 sm:p-6 max-w-2xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="bg-white rounded-2xl border border-slate-200/80 shadow-md p-6 sm:p-8 text-center"
+          >
+            <div className="w-16 h-16 bg-emerald-50 border border-emerald-200/80 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <AnimatedCheckmark size={44} color="#10B981" />
             </div>
-            <h2 className="text-xl font-bold text-gray-800 mb-2">Payment Recorded Successfully!</h2>
-            <p className="text-gray-500 text-sm mb-6">Receipt: {payment.receiptNo}</p>
-            <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left space-y-2">
-              <div className="flex justify-between text-sm"><span className="text-gray-500">Student</span><span className="font-medium">{selectedStudent.name}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">Amount</span><span className="font-bold text-emerald-600">{formatCurrency(payment.amountPaid)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">Mode</span><span className="font-medium">{payment.paymentMode}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-gray-500">Academic Year</span><span className="font-medium">{payment.academicYear}</span></div>
+            
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">Fee Receipt Voucher Issued</h2>
+            <p className="text-xs text-slate-500 mt-1">Transaction has been permanently committed to the fee ledger</p>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-xs font-semibold my-4">
+              <Lock className="w-3 h-3 text-amber-600" />
+              <span>Audit Status: LOCKED (One-Time Voucher)</span>
+            </div>
+
+            <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-5 mb-6 text-left space-y-3">
+              <div className="text-center pb-2.5 border-b border-slate-200/80">
+                <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
+                  SRI SAI DEGREE & PG COLLEGE
+                </h3>
+                <p className="text-[9.5px] font-semibold text-slate-500 uppercase tracking-widest mt-0.5">
+                  VIZIANAGARAM · ANDHRA PRADESH
+                </p>
+              </div>
+              <div className="flex justify-between items-center text-xs pb-2 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">Receipt Voucher No</span>
+                <span className="font-mono font-bold text-blue-700 text-sm">{payment.receiptNo}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500">Student Name</span>
+                <span className="font-semibold text-slate-800">{selectedStudent.name}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500">Admission / Student ID</span>
+                <span className="font-mono text-slate-700">{selectedStudent.admissionNo || selectedStudent.studentId}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500">Academic Session</span>
+                <span className="font-mono font-medium text-slate-700">{payment.academicYear}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500">Payment Instrument</span>
+                <span className="font-semibold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200/70">{payment.paymentMode}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-200/60">
+                <span className="text-emerald-700 font-bold uppercase tracking-wider">Amount Collected</span>
+                <span className="font-mono font-bold text-base text-emerald-700">{formatCurrency(payment.amountPaid)}</span>
+              </div>
               {summary?.currentYearSummary && (
-                <>
-                  <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between text-sm"><span className="text-gray-500">Remaining Due</span><span className="font-bold text-red-600">{formatCurrency(summary.currentYearSummary.pending)}</span></div>
-                </>
+                <div className="flex justify-between items-center text-xs pt-2 border-t border-dashed border-slate-200/80">
+                  <span className="text-slate-500 font-medium">Remaining Active Due</span>
+                  <span className="font-mono font-bold text-rose-600">{formatCurrency(summary.currentYearSummary.pending)}</span>
+                </div>
               )}
             </div>
-            <div className="flex gap-3">
-              <button onClick={() => navigate(`/students/${selectedStudent.studentId}`)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">
-                View Student
-              </button>
-              <button onClick={() => { setSuccess(null); setSelectedStudent(null); setFeeSummary(null); setForm({ academicYear: form.academicYear, amountPaid: '', paymentDate: new Date().toISOString().split('T')[0], paymentMode: 'Cash', transactionId: '', remarks: '' }); }} className="flex-1 py-2.5 bg-navy-700 text-white rounded-xl text-sm font-medium hover:bg-navy-800">
-                New Payment
-              </button>
-            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.25 }}
+              className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+            >
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => window.print()}
+                className="flex items-center justify-center gap-1.5 py-2.5 px-4 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+              >
+                <Printer className="w-4 h-4 text-slate-500" /> Print Voucher
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => navigate(`/students/${selectedStudent.studentId}`)}
+                className="flex items-center justify-center gap-1.5 py-2.5 px-4 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+              >
+                <User className="w-4 h-4 text-slate-500" /> Student Profile
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  setSuccess(null);
+                  setSelectedStudent(null);
+                  setFeeSummary(null);
+                  setForm({
+                    academicYear: form.academicYear,
+                    amountPaid: '',
+                    paymentDate: new Date().toISOString().split('T')[0],
+                    paymentMode: 'Cash',
+                    transactionId: '',
+                    remarks: ''
+                  });
+                }}
+                className="flex items-center justify-center gap-1.5 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" /> Next Payment
+              </motion.button>
+            </motion.div>
           </motion.div>
         </div>
       </div>
@@ -138,50 +223,89 @@ export default function RecordPaymentPage() {
   }
 
   const currentSummary = feeSummary?.currentYearSummary;
+  const remainingCalculated = currentSummary ? Math.max(0, currentSummary.pending - (parseFloat(form.amountPaid) || 0)) : 0;
 
   return (
     <div>
       <Topbar title="Record Payment" />
-      <div className="p-6 pt-4">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4">
-          <ArrowLeft className="w-4 h-4" /> Back
+      <motion.div
+        variants={pageVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        className="p-4 sm:p-6 space-y-5"
+      >
+        
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Return to Previous Screen
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Payment Form */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-navy-600" /> Record Payment
-            </h2>
+          
+          {/* Main Payment Form Card */}
+          <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] p-5 sm:p-6">
+            <div className="flex items-center gap-2.5 pb-4 mb-5 border-b border-slate-100">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                <CreditCard className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Fee Receipt Entry Terminal</h2>
+                <p className="text-xs text-slate-500">Record cashier collections with immediate ledger posting</p>
+              </div>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Student Search */}
+              {/* Student Lookup */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Student *</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Target Student *
+                </label>
                 {selectedStudent ? (
-                  <div className="flex items-center justify-between p-3 bg-navy-50 border border-navy-200 rounded-xl">
-                    <div>
-                      <p className="text-sm font-semibold text-navy-800">{selectedStudent.name}</p>
-                      <p className="text-xs text-navy-600">{selectedStudent.admissionNo || selectedStudent.studentId} • {selectedStudent.course} • {selectedStudent.currentYear}</p>
+                  <div className="flex items-center justify-between p-3.5 bg-blue-50/60 border border-blue-200 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs uppercase">
+                        {selectedStudent.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-blue-950">{selectedStudent.name}</p>
+                        <p className="text-[11px] text-blue-800 font-mono">
+                          {selectedStudent.admissionNo || selectedStudent.studentId} • {selectedStudent.course} • {selectedStudent.currentYear}
+                        </p>
+                      </div>
                     </div>
-                    <button type="button" onClick={() => { setSelectedStudent(null); setFeeSummary(null); }} className="text-xs text-navy-600 hover:text-navy-800 font-medium">Change</button>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedStudent(null); setFeeSummary(null); }}
+                      className="text-xs font-semibold text-blue-700 hover:text-blue-900 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      Change Student
+                    </button>
                   </div>
                 ) : (
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
                       value={search}
                       onChange={e => handleSearch(e.target.value)}
-                      placeholder="Search student by name, ID, phone..."
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500"
+                      placeholder="Search student by name, student ID, roll no, admission no..."
+                      className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400"
                     />
                     {searchResults.length > 0 && (
-                      <div className="absolute top-full mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-100 max-h-60 overflow-y-auto z-20">
+                      <div className="absolute top-full mt-1.5 w-full bg-white rounded-xl shadow-xl border border-slate-200 max-h-64 overflow-y-auto z-30">
                         {searchResults.map(s => (
-                          <div key={s.studentId} onClick={() => selectStudent(s)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
-                            <p className="text-sm font-medium text-gray-800">{s.name}</p>
-                            <p className="text-xs text-gray-500">{s.admissionNo} • {s.course} • {s.currentYear}</p>
+                          <div
+                            key={s.studentId}
+                            onClick={() => selectStudent(s)}
+                            className="px-4 py-3 hover:bg-blue-50/50 cursor-pointer border-b border-slate-100 last:border-0 transition-colors"
+                          >
+                            <p className="text-xs font-bold text-slate-800">{s.name}</p>
+                            <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                              {s.admissionNo} • {s.course} • {s.currentYear}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -190,76 +314,216 @@ export default function RecordPaymentPage() {
                 )}
               </div>
 
+              {/* Form Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Academic Year *</label>
-                  <select value={form.academicYear} onChange={e => handleAcademicYearChange(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500">
-                    <option value="">Select</option>
-                    {academicYears.map(y => <option key={y.year} value={y.year}>{y.year}{y.isCurrent ? ' (Current)' : ''}</option>)}
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Academic Session *
+                  </label>
+                  <select
+                    value={form.academicYear}
+                    onChange={e => handleAcademicYearChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800 font-medium"
+                  >
+                    <option value="">Select Academic Year</option>
+                    {academicYears.map(y => (
+                      <option key={y.year} value={y.year}>
+                        {y.year} {y.isCurrent ? '(Active Current Session)' : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount (₹) *</label>
-                  <input type="number" value={form.amountPaid} onChange={e => setForm(prev => ({ ...prev, amountPaid: e.target.value }))} placeholder="Enter amount" min="1" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500" required />
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Receipt Amount (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    value={form.amountPaid}
+                    onChange={e => setForm(prev => ({ ...prev, amountPaid: e.target.value }))}
+                    placeholder="Enter collected amount"
+                    min="1"
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
+                    required
+                  />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Date *</label>
-                  <input type="date" value={form.paymentDate} onChange={e => setForm(prev => ({ ...prev, paymentDate: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500" required />
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Transaction Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={form.paymentDate}
+                    onChange={e => setForm(prev => ({ ...prev, paymentDate: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800 font-medium"
+                    required
+                  />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Mode *</label>
-                  <select value={form.paymentMode} onChange={e => setForm(prev => ({ ...prev, paymentMode: e.target.value }))} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500">
-                    {['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque', 'Other'].map(m => <option key={m} value={m}>{m}</option>)}
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Payment Instrument / Channel *
+                  </label>
+                  <select
+                    value={form.paymentMode}
+                    onChange={e => setForm(prev => ({ ...prev, paymentMode: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800 font-medium"
+                  >
+                    {['Cash', 'UPI', 'Card', 'Bank Transfer', 'Cheque', 'Other'].map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Transaction / Reference Number</label>
-                <input type="text" value={form.transactionId} onChange={e => setForm(prev => ({ ...prev, transactionId: e.target.value }))} placeholder="e.g. UPI123456, NEFT ref, Cheque no." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500" />
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Voucher / UTR / Cheque Reference Number
+                </label>
+                <input
+                  type="text"
+                  value={form.transactionId}
+                  onChange={e => setForm(prev => ({ ...prev, transactionId: e.target.value }))}
+                  placeholder="e.g. UPI / UTR ref no, NEFT Txn ID, or Bank Cheque serial..."
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Remarks</label>
-                <textarea value={form.remarks} onChange={e => setForm(prev => ({ ...prev, remarks: e.target.value }))} rows="2" placeholder="Optional notes" className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-navy-500/20 focus:border-navy-500 resize-none" />
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Internal Remarks & Audit Notes
+                </label>
+                <textarea
+                  value={form.remarks}
+                  onChange={e => setForm(prev => ({ ...prev, remarks: e.target.value }))}
+                  rows="2"
+                  placeholder="Optional audit notes or fee concessions..."
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none text-slate-800"
+                />
               </div>
 
-              <button type="submit" disabled={submitting || !selectedStudent} className="w-full py-3.5 bg-navy-700 hover:bg-navy-800 text-white font-semibold rounded-xl transition-colors shadow-sm disabled:opacity-50 text-sm">
-                {submitting ? 'Processing...' : 'SAVE PAYMENT'}
-              </button>
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={submitting || !selectedStudent}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-sm disabled:opacity-50 text-xs tracking-wider uppercase flex items-center justify-center gap-2"
+                >
+                  <Lock className="w-4 h-4" />
+                  {submitting ? 'Posting Voucher...' : 'Generate Receipt & Post to Ledger'}
+                </button>
+              </div>
             </form>
           </div>
 
-          {/* Fee Breakdown Sidebar */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 h-fit lg:sticky lg:top-6">
-            <h3 className="text-base font-semibold text-gray-800 mb-4">Fee Breakdown</h3>
+          {/* Fee Breakdown & Real-Time Calculation Sidebar */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] p-5 sm:p-6 h-fit lg:sticky lg:top-20 space-y-4">
+            <div className="pb-3 border-b border-slate-100">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Demand Summary</h3>
+              <p className="text-[11px] text-slate-500">Live ledger dues for the selected session</p>
+            </div>
+
             {!selectedStudent ? (
-              <p className="text-sm text-gray-400 py-8 text-center">Select a student to view fee breakdown</p>
+              <div className="py-12 text-center text-slate-400 text-xs">
+                <User className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                Select a student to inspect current balance and dues
+              </div>
             ) : !currentSummary ? (
-              <p className="text-sm text-gray-400 py-8 text-center">No fee demand for this year</p>
+              <div className="py-8 text-center text-slate-400 text-xs">
+                No assessed fee demand for session {form.academicYear || 'selected'}
+              </div>
             ) : (
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Current Year Fee</span><span className="font-medium">{formatCurrency(currentSummary.currentYearFee)}</span></div>
-                {currentSummary.previousYearDue > 0 && (
-                  <div className="flex justify-between text-sm"><span className="text-amber-600">Previous Year Due</span><span className="font-medium text-amber-600">{formatCurrency(currentSummary.previousYearDue)}</span></div>
-                )}
-                <div className="border-t border-dashed border-gray-200 pt-2 flex justify-between text-sm font-semibold"><span>Total Payable</span><span>{formatCurrency(currentSummary.totalPayable)}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-emerald-600">Already Paid</span><span className="text-emerald-600 font-medium">{formatCurrency(currentSummary.totalPaid)}</span></div>
-                {form.amountPaid && parseFloat(form.amountPaid) > 0 && (
-                  <div className="flex justify-between text-sm"><span className="text-blue-600">Current Payment</span><span className="text-blue-600 font-medium">{formatCurrency(parseFloat(form.amountPaid))}</span></div>
-                )}
-                <div className="border-t border-gray-200 pt-2 flex justify-between text-sm font-bold">
-                  <span className="text-red-600">Remaining Due</span>
-                  <span className="text-red-600">{formatCurrency(Math.max(0, currentSummary.pending - (parseFloat(form.amountPaid) || 0)))}</span>
+              <div className="space-y-4">
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Current Session Demands</span>
+                    <span className="font-mono font-medium text-slate-800">{formatCurrency(currentSummary.currentYearFee)}</span>
+                  </div>
+                  {currentSummary.previousYearDue > 0 && (
+                    <div className="flex justify-between text-amber-700">
+                      <span>Arrears / Previous Due</span>
+                      <span className="font-mono font-semibold">{formatCurrency(currentSummary.previousYearDue)}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-slate-200/80 pt-2 flex justify-between font-bold text-slate-900">
+                    <span>Total Assessed</span>
+                    <span className="font-mono">{formatCurrency(currentSummary.totalPayable)}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-700 font-semibold">
+                    <span>Already Received</span>
+                    <span className="font-mono">{formatCurrency(currentSummary.totalPaid)}</span>
+                  </div>
+                  
+                  {form.amountPaid && parseFloat(form.amountPaid) > 0 && (
+                    <div className="flex justify-between text-blue-600 font-bold bg-blue-50/70 p-2 rounded-lg border border-blue-100">
+                      <span>Voucher Amount Entering</span>
+                      <span className="font-mono">{formatCurrency(parseFloat(form.amountPaid))}</span>
+                    </div>
+                  )}
+
+                  <div className="border-t border-slate-200/80 pt-2 flex justify-between font-bold text-sm">
+                    <span className="text-rose-600">Post-Payment Due</span>
+                    <span className="font-mono text-rose-600">{formatCurrency(remainingCalculated)}</span>
+                  </div>
+
+                  <div className="pt-1">
+                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${getStatusColor(currentSummary.status)}`}>
+                      Status: {currentSummary.status}
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-2">
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(currentSummary.status)}`}>{currentSummary.status}</span>
-                </div>
+
+                {/* Active Fee Categories List */}
+                {currentSummary.activeCategories?.length > 0 && (
+                  <div className="border-t border-slate-100 pt-3">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Active Fee Breakdown</h4>
+                    <div className="space-y-1.5">
+                      {currentSummary.activeCategories.map((cat, idx) => (
+                        <div key={idx} className="flex justify-between items-center text-xs py-1.5 px-2 bg-slate-50 rounded-lg">
+                          <div>
+                            <span className="font-semibold text-slate-700">{cat.category}</span>
+                            {cat.semester && <span className="text-blue-600 text-[10px] ml-1 font-mono">({cat.semester})</span>}
+                          </div>
+                          <span className="font-mono font-bold text-slate-800">{formatCurrency(cat.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Upcoming Scheduled Fees */}
+                {currentSummary.upcomingCategories?.length > 0 && (
+                  <div className="border-t border-slate-100 pt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-[10px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-600" /> Scheduled Fees
+                      </h4>
+                      <span className="px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded text-[9px] font-bold">Pending date</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {currentSummary.upcomingCategories.map((cat, idx) => (
+                        <div key={idx} className="p-2 bg-amber-50/50 border border-amber-200/60 rounded-lg text-xs flex justify-between items-center">
+                          <div>
+                            <p className="font-semibold text-slate-800">{cat.category}</p>
+                            <p className="text-[10px] text-amber-700">
+                              {cat.semester ? `${cat.semester} • ` : ''}
+                              Activates {cat.activationDate ? new Date(cat.activationDate).toLocaleDateString() : 'Scheduled'}
+                            </p>
+                          </div>
+                          <span className="font-mono font-bold text-slate-600">{formatCurrency(cat.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
               </div>
             )}
           </div>
+
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

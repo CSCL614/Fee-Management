@@ -6,6 +6,8 @@ import {
   AlertCircle, Settings, Shield, UserCog, LogOut, ChevronLeft,
   ChevronRight, GraduationCap, Menu, X
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import CollegeLogo from './CollegeLogo';
 
 const adminMenu = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -45,78 +47,115 @@ export default function Sidebar({ collapsed: propCollapsed, setCollapsed: propSe
     navigate('/login');
   };
 
-  const navLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-      isActive
-        ? 'bg-white/15 text-white shadow-sm'
-        : 'text-blue-100 hover:bg-white/10 hover:text-white'
-    }`;
-
   const renderSidebarContent = (isMobile = false) => {
     const showText = isMobile || !collapsed;
 
     return (
       <>
         {/* Logo */}
-        <div className="px-4 py-5 border-b border-white/10">
+        <div className={`px-4 py-5 border-b border-white/[0.08] ${collapsed && !isMobile ? 'px-3' : ''}`}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shrink-0">
-              <GraduationCap className="w-6 h-6 text-white" />
-            </div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              transition={{ duration: 0.2 }}
+              className="shrink-0"
+            >
+              <div className="w-10 h-10 rounded-xl bg-white/[0.08] border border-white/20 flex items-center justify-center text-white shrink-0 shadow-md">
+                <GraduationCap className="w-5 h-5 text-white stroke-[1.8]" />
+              </div>
+            </motion.div>
             {showText && (
-              <div className="animate-fade-in">
-                <h1 className="text-white font-bold text-sm leading-tight">Sri Vidya</h1>
-                <p className="text-blue-200 text-xs">Fee Management</p>
+              <div className="min-w-0">
+                <h1 className="text-white font-bold text-xs sm:text-[13px] leading-tight tracking-wide uppercase">
+                  SRI SAI DEGREE & PG COLLEGE
+                </h1>
+                <p className="text-slate-400 text-[9px] font-semibold uppercase tracking-widest mt-0.5">
+                  VIZIANAGARAM · ANDHRA PRADESH
+                </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Menu */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        {/* Navigation Label */}
+        {showText && (
+          <div className="px-5 pt-5 pb-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Navigation</p>
+          </div>
+        )}
+
+        {/* Menu items with smooth layoutId active indicator & icon scale */}
+        <nav className={`flex-1 px-3 ${showText ? 'py-1' : 'py-4'} space-y-0.5 overflow-y-auto sidebar-scroll`}>
           {menu.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
-              className={navLinkClass}
               onClick={() => setMobileOpen(false)}
+              title={collapsed && !isMobile ? item.label : undefined}
+              className={({ isActive }) =>
+                `group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40 ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-slate-300 hover:text-white hover:bg-white/[0.05]'
+                }`
+              }
             >
-              <item.icon className="w-5 h-5 shrink-0" />
-              {showText && <span>{item.label}</span>}
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <motion.div
+                      layoutId={isMobile ? 'sidebar-active-indicator-mobile' : 'sidebar-active-indicator'}
+                      className="absolute inset-0 bg-blue-600/20 rounded-lg border-l-[3px] border-blue-400"
+                      transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                    />
+                  )}
+                  <item.icon
+                    className={`relative z-10 w-[18px] h-[18px] shrink-0 transition-all duration-200 group-hover:scale-110 ${
+                      collapsed && !isMobile ? 'mx-auto' : ''
+                    } ${isActive ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'}`}
+                  />
+                  {showText && <span className="relative z-10 truncate">{item.label}</span>}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
 
         {/* User Info */}
-        <div className="px-3 py-4 border-t border-white/10">
+        <div className="px-3 py-4 border-t border-white/[0.08] mt-auto">
           <div className={`flex items-center ${!showText ? 'justify-center' : 'gap-3 px-2'} mb-3`}>
-            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center shrink-0">
-              <span className="text-white text-xs font-bold">{user?.name?.charAt(0)}</span>
+            <div className="w-8 h-8 bg-blue-600/20 rounded-lg flex items-center justify-center shrink-0 border border-blue-500/15">
+              <span className="text-blue-300 text-xs font-bold">{user?.name?.charAt(0)?.toUpperCase()}</span>
             </div>
             {showText && (
-              <div className="animate-fade-in min-w-0">
-                <p className="text-white text-sm font-medium truncate">{user?.name}</p>
-                <p className="text-blue-200 text-xs capitalize">{user?.role}</p>
+              <div className="min-w-0">
+                <p className="text-white text-[13px] font-semibold truncate">{user?.name}</p>
+                <p className="text-slate-400 text-[11px] capitalize font-medium">{user?.role}</p>
               </div>
             )}
           </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-2 w-full rounded-lg text-sm text-red-200 hover:bg-red-500/20 hover:text-red-100 transition-colors"
+            className={`flex items-center gap-2.5 px-3 py-2 w-full rounded-lg text-[13px] font-medium text-slate-400 hover:bg-rose-500/10 hover:text-rose-300 active:scale-[0.98] transition-all duration-150 ${
+              !showText ? 'justify-center' : ''
+            }`}
           >
-            <LogOut className="w-4 h-4 shrink-0" />
+            <LogOut className="w-4 h-4 shrink-0 transition-transform duration-150 group-hover:-translate-x-0.5" />
             {showText && <span>Logout</span>}
           </button>
         </div>
 
         {/* Collapse toggle (desktop only) */}
         {!isMobile && (
-          <button
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-navy-700 border-2 border-navy-500 rounded-full items-center justify-center text-white hover:bg-navy-600 transition-colors z-10"
+            className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-navy-800 border border-navy-600/50 rounded-full items-center justify-center text-slate-300 hover:text-white hover:bg-navy-700 transition-colors z-10 shadow-md cursor-pointer"
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
-          </button>
+            {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+          </motion.button>
         )}
       </>
     );
@@ -125,34 +164,50 @@ export default function Sidebar({ collapsed: propCollapsed, setCollapsed: propSe
   return (
     <>
       {/* Mobile toggle (Top Right) */}
-      <button
+      <motion.button
+        whileTap={{ scale: 0.94 }}
         onClick={() => setMobileOpen(true)}
-        className="lg:hidden fixed top-3 right-4 z-50 w-10 h-10 bg-navy-700 hover:bg-navy-800 rounded-xl flex items-center justify-center text-white shadow-md transition-colors"
+        className="lg:hidden fixed top-3 right-4 z-50 w-10 h-10 bg-navy-800 hover:bg-navy-700 rounded-xl flex items-center justify-center text-white shadow-lg transition-colors cursor-pointer"
+        aria-label="Open navigation menu"
       >
         <Menu className="w-5 h-5" />
-      </button>
+      </motion.button>
 
       {/* Mobile overlay */}
-      {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end" onClick={() => setMobileOpen(false)}>
-          <div
-            className="w-64 h-full bg-gradient-to-b from-navy-800 to-navy-950 flex flex-col relative shadow-2xl"
-            onClick={e => e.stopPropagation()}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-end"
+            onClick={() => setMobileOpen(false)}
           >
-            <button
-              onClick={() => setMobileOpen(false)}
-              className="absolute top-4 right-4 text-white/60 hover:text-white p-1"
+            <motion.div
+              initial={{ x: 264 }}
+              animate={{ x: 0 }}
+              exit={{ x: 264 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              className="w-[264px] h-full bg-navy-800 flex flex-col relative shadow-2xl"
+              onClick={e => e.stopPropagation()}
             >
-              <X className="w-5 h-5" />
-            </button>
-            {renderSidebarContent(true)}
-          </div>
-        </div>
-      )}
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                aria-label="Close navigation menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              {renderSidebarContent(true)}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Desktop sidebar */}
       <aside
-        className={`hidden lg:flex flex-col bg-gradient-to-b from-navy-800 to-navy-950 fixed top-0 left-0 bottom-0 h-screen z-30 transition-all duration-300 ${
+        className={`hidden lg:flex flex-col bg-navy-800 fixed top-0 left-0 bottom-0 h-screen z-30 transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] border-r border-navy-700/50 ${
           collapsed ? 'w-[72px]' : 'w-64'
         }`}
       >

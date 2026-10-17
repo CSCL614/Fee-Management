@@ -471,6 +471,19 @@ export default function DashboardPage() {
                     <motion.button
                       whileHover={{ x: 3 }}
                       whileTap={{ scale: 0.98 }}
+                      onClick={() => navigate('/students/import')}
+                      className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200/50 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                        <span>Import Students from Excel</span>
+                      </div>
+                      <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
+                    </motion.button>
+                    
+                    <motion.button
+                      whileHover={{ x: 3 }}
+                      whileTap={{ scale: 0.98 }}
                       onClick={() => navigate('/record-payment')}
                       className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold text-emerald-900 bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200/50 transition-colors cursor-pointer"
                     >

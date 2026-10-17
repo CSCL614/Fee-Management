@@ -7,7 +7,7 @@ import { formatCurrency, getStatusColor } from '../utils/helpers';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserPlus, Filter, ChevronLeft, ChevronRight, Users as UsersIcon,
-  Search, X, RotateCcw, ArrowRight, CheckCircle2, AlertCircle
+  Search, X, RotateCcw, ArrowRight, CheckCircle2, AlertCircle, FileSpreadsheet
 } from 'lucide-react';
 import { pageVariants } from '../utils/animations';
 
@@ -111,13 +111,22 @@ export default function StudentsPage() {
               </button>
 
               {isAdmin && (
-                <button
-                  onClick={() => navigate('/students/new')}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm hover:shadow"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>Add Student</span>
-                </button>
+                <>
+                  <button
+                    onClick={() => navigate('/students/import')}
+                    className="flex items-center gap-2 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 rounded-xl text-xs font-semibold transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Import Excel</span>
+                  </button>
+                  <button
+                    onClick={() => navigate('/students/new')}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm hover:shadow cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Add Student</span>
+                  </button>
+                </>
               )}
             </div>
           </div>

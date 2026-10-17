@@ -14,6 +14,7 @@ import ReportsPage from './pages/ReportsPage';
 import AuditLogPage from './pages/AuditLogPage';
 import ManageUsersPage from './pages/ManageUsersPage';
 import SettingsPage from './pages/SettingsPage';
+import ImportStudentsPage from './pages/ImportStudentsPage';
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading, isAdmin } = useAuth();
@@ -42,6 +43,7 @@ function AppRoutes() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="students" element={<StudentsPage />} />
+        <Route path="students/import" element={<ProtectedRoute adminOnly><ImportStudentsPage /></ProtectedRoute>} />
         <Route path="students/new" element={<ProtectedRoute adminOnly><AddStudentPage /></ProtectedRoute>} />
         <Route path="students/:id" element={<StudentProfilePage />} />
         <Route path="record-payment" element={<RecordPaymentPage />} />

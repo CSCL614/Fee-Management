@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import StudentsPage from './pages/StudentsPage';
 import StudentProfilePage from './pages/StudentProfilePage';
+import EditStudentPage from './pages/EditStudentPage';
 import AddStudentPage from './pages/AddStudentPage';
 import RecordPaymentPage from './pages/RecordPaymentPage';
 import PaymentsPage from './pages/PaymentsPage';
@@ -46,6 +47,7 @@ function AppRoutes() {
         <Route path="students/import" element={<ProtectedRoute adminOnly><ImportStudentsPage /></ProtectedRoute>} />
         <Route path="students/new" element={<ProtectedRoute adminOnly><AddStudentPage /></ProtectedRoute>} />
         <Route path="students/:id" element={<StudentProfilePage />} />
+        <Route path="students/:id/edit" element={<ProtectedRoute adminOnly><EditStudentPage /></ProtectedRoute>} />
         <Route path="record-payment" element={<RecordPaymentPage />} />
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="fee-structure" element={<ProtectedRoute><FeeStructurePage /></ProtectedRoute>} />

@@ -7,7 +7,7 @@ import { formatCurrency, getStatusColor } from '../utils/helpers';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   UserPlus, Filter, ChevronLeft, ChevronRight, Users as UsersIcon,
-  Search, X, RotateCcw, ArrowRight, CheckCircle2, AlertCircle, FileSpreadsheet
+  Search, X, RotateCcw, ArrowRight, CheckCircle2, AlertCircle, FileSpreadsheet, Edit
 } from 'lucide-react';
 import { pageVariants } from '../utils/animations';
 
@@ -301,9 +301,16 @@ export default function StudentsPage() {
                             {s.name.charAt(0)}
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
-                              {s.name}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                                {s.name}
+                              </p>
+                              {s.status === 'Inactive' && (
+                                <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                  Inactive
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-slate-400 font-mono">{s.admissionNo}</p>
                           </div>
                         </div>
@@ -339,9 +346,23 @@ export default function StudentsPage() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 group-hover:text-blue-700">
-                          View <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                        </span>
+                        <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+                          {isAdmin && (
+                            <button
+                              onClick={() => navigate(`/students/${s.studentId}/edit`)}
+                              className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                              title="Edit Student Profile"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => navigate(`/students/${s.studentId}`)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                          >
+                            View <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                          </button>
+                        </div>
                       </td>
                     </motion.tr>
                   ))

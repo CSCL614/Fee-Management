@@ -9,7 +9,8 @@ import toast from 'react-hot-toast';
 import {
   CreditCard, Mail, Download, User, Phone, AtSign, BookOpen,
   GraduationCap, Calendar, ArrowLeft, Edit, ShieldCheck, Lock,
-  AlertCircle, Receipt, FileText, CheckCircle2, History, AlertTriangle, X
+  AlertCircle, Receipt, FileText, CheckCircle2, History, AlertTriangle, X,
+  Power, RotateCcw, Trash2
 } from 'lucide-react';
 import { modalVariants, backdropVariants, pageVariants } from '../utils/animations';
 
@@ -27,17 +28,31 @@ export default function StudentProfilePage() {
   const [editAmount, setEditAmount] = useState('');
   const [modalSubmitting, setModalSubmitting] = useState(false);
 
+  // Student Status Modal (Deactivate / Reactivate)
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [targetStatus, setTargetStatus] = useState('Inactive');
+  const [statusReason, setStatusReason] = useState('');
+  const [statusUpdating, setStatusUpdating] = useState(false);
+
+  // Student Delete Modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteWarning, setDeleteWarning] = useState(null);
+
   useEffect(() => { fetchStudent(); }, [id]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && actionModal) {
-        setActionModal(null);
+      if (e.key === 'Escape') {
+        if (actionModal) setActionModal(null);
+        if (showStatusModal) setShowStatusModal(false);
+        if (showDeleteModal) setShowDeleteModal(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [actionModal]);
+  }, [actionModal, showStatusModal, showDeleteModal]);
 
   const fetchStudent = async () => {
     try {
@@ -77,6 +92,48 @@ export default function StudentProfilePage() {
     }
   };
 
+  const handleStatusChange = async (e) => {
+    e.preventDefault();
+    setStatusUpdating(true);
+    try {
+      await api.patch(`/students/${student.studentId}/status`, {
+        status: targetStatus,
+        reason: statusReason.trim() || undefined
+      });
+      toast.success(`Student status changed to ${targetStatus}`);
+      setShowStatusModal(false);
+      setStatusReason('');
+      fetchStudent();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update status');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  const handleDeleteStudent = async (e) => {
+    if (e) e.preventDefault();
+    setDeleting(true);
+    setDeleteWarning(null);
+    try {
+      const res = await api.delete(`/students/${student.studentId}`, {
+        data: { reason: deleteReason.trim() }
+      });
+      toast.success(res.data.message || 'Student deleted successfully');
+      setShowDeleteModal(false);
+      navigate('/students');
+    } catch (err) {
+      const errData = err.response?.data;
+      if (errData?.hasPayments) {
+        setDeleteWarning(errData.message);
+      } else {
+        toast.error(errData?.message || 'Failed to delete student');
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div>
@@ -105,6 +162,7 @@ export default function StudentProfilePage() {
   const { student, feeSummary, feeLedger } = data;
   const overall = feeSummary?.overall || {};
   const yearSummaries = feeSummary?.yearSummaries || [];
+  const hasPaidFees = (overall.totalPaid || 0) > 0;
 
   const tabs = [
     { id: 'fee-summary', label: 'Fee Demands & Structure', icon: BookOpen },
@@ -147,8 +205,8 @@ export default function StudentProfilePage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{student.name}</h1>
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusColor(overall.status || student.status)}`}>
-                    {overall.status || student.status}
+                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusColor(student.status)}`}>
+                    {student.status}
                   </span>
                 </div>
 
@@ -184,17 +242,57 @@ export default function StudentProfilePage() {
             <div className="flex flex-wrap items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
               <button
                 onClick={() => navigate(`/record-payment?student=${student.studentId}`)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs"
+                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
               >
                 <CreditCard className="w-4 h-4" /> Collect Payment
               </button>
               {isAdmin && (
-                <button
-                  onClick={() => navigate(`/students/${student.studentId}/edit`)}
-                  className="flex items-center gap-2 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-2xs"
-                >
-                  <Edit className="w-3.5 h-3.5" /> Edit Record
-                </button>
+                <>
+                  <button
+                    onClick={() => navigate(`/students/${student.studentId}/edit`)}
+                    className="flex items-center gap-2 px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <Edit className="w-3.5 h-3.5 text-blue-600" /> Edit Profile
+                  </button>
+
+                  {student.status === 'Active' ? (
+                    <button
+                      onClick={() => {
+                        setTargetStatus('Inactive');
+                        setStatusReason('');
+                        setShowStatusModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2.5 border border-amber-200 rounded-xl text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer"
+                      title="Deactivate this student (preserves financial audit history)"
+                    >
+                      <Power className="w-3.5 h-3.5 text-amber-600" /> Deactivate
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setTargetStatus('Active');
+                        setStatusReason('');
+                        setShowStatusModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2.5 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors shadow-2xs cursor-pointer"
+                      title="Reactivate this student to active status"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-emerald-600" /> Reactivate
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setDeleteWarning(null);
+                      setDeleteReason('');
+                      setShowDeleteModal(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2.5 border border-rose-200 rounded-xl text-xs font-semibold text-rose-700 bg-white hover:bg-rose-50 transition-colors shadow-2xs cursor-pointer"
+                    title="Delete student record"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-500" /> Delete
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -222,6 +320,33 @@ export default function StudentProfilePage() {
             </div>
           </div>
         </motion.div>
+
+        {/* Deactivated Inactive Banner */}
+        {student.status === 'Inactive' && (
+          <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-900">Student Account Deactivated (Inactive)</p>
+                <p className="text-amber-800/90 mt-0.5">
+                  This student's account is currently marked as Inactive. Historical fee receipts, vouchers, and ledger balances are fully preserved, but active invoicing is paused.
+                </p>
+              </div>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setTargetStatus('Active');
+                  setStatusReason('');
+                  setShowStatusModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-xs transition-colors shrink-0 cursor-pointer shadow-xs"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Reactivate Student
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Tab Controls Bar with Sliding layoutId Active Indicator */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-1 shadow-2xs flex overflow-x-auto gap-1">
@@ -489,7 +614,17 @@ export default function StudentProfilePage() {
           {activeTab === 'details' && (
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] p-5 sm:p-6 space-y-6">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Official Student Record</h3>
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Official Student Record</h3>
+                  {isAdmin && (
+                    <button
+                      onClick={() => navigate(`/students/${student.studentId}/edit`)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+                    >
+                      <Edit className="w-3.5 h-3.5 text-blue-600" /> Edit Profile Details
+                    </button>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                   {[
                     { label: 'Student ID', value: student.studentId, isMono: true },
@@ -630,6 +765,210 @@ export default function StudentProfilePage() {
                     </button>
                   </div>
                 </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Status Change Modal (Deactivate / Reactivate) */}
+        <AnimatePresence>
+          {showStatusModal && (
+            <motion.div
+              variants={backdropVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={() => setShowStatusModal(false)}
+              className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+            >
+              <motion.div
+                variants={modalVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                onClick={e => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4"
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    {targetStatus === 'Inactive' ? (
+                      <Power className="w-5 h-5 text-amber-600" />
+                    ) : (
+                      <RotateCcw className="w-5 h-5 text-emerald-600" />
+                    )}
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      {targetStatus === 'Inactive' ? 'Deactivate Student Account' : 'Reactivate Student Account'}
+                    </h3>
+                  </div>
+                  <button onClick={() => setShowStatusModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className={`p-3.5 rounded-xl text-xs space-y-1.5 ${targetStatus === 'Inactive' ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-emerald-50 text-emerald-900 border border-emerald-200'}`}>
+                  <p className="font-semibold">
+                    {targetStatus === 'Inactive'
+                      ? 'Deactivation preserves all past receipts and financial history for auditing.'
+                      : 'Reactivating will restore this student to active directory status.'}
+                  </p>
+                  <p className="opacity-90">
+                    Student: <strong>{student.name}</strong> ({student.admissionNo || student.studentId})
+                  </p>
+                </div>
+
+                <form onSubmit={handleStatusChange} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Reason for Audit Trail
+                    </label>
+                    <textarea
+                      value={statusReason}
+                      onChange={e => setStatusReason(e.target.value)}
+                      placeholder={targetStatus === 'Inactive' ? 'e.g. Student took temporary leave / discontinued studies' : 'e.g. Returned to institute / reactivated enrollment'}
+                      rows="3"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowStatusModal(false)}
+                      className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={statusUpdating}
+                      className={`px-4 py-2 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                        targetStatus === 'Inactive'
+                          ? 'bg-amber-600 hover:bg-amber-700'
+                          : 'bg-emerald-600 hover:bg-emerald-700'
+                      }`}
+                    >
+                      {statusUpdating ? 'Updating...' : targetStatus === 'Inactive' ? 'Confirm Deactivation' : 'Confirm Reactivation'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Modal: Delete Confirmation with Safety Guard */}
+        <AnimatePresence>
+          {showDeleteModal && (
+            <motion.div
+              variants={backdropVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={() => setShowDeleteModal(false)}
+              className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+            >
+              <motion.div
+                variants={modalVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                onClick={e => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4"
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Trash2 className="w-5 h-5 text-rose-600" />
+                    <h3 className="font-bold text-slate-900 text-sm">Delete Student Record</h3>
+                  </div>
+                  <button onClick={() => setShowDeleteModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {deleteWarning || hasPaidFees ? (
+                  <div className="space-y-4">
+                    <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-rose-800">Permanent Deletion Blocked by Audit Rules</p>
+                          <p className="mt-1 text-rose-700">
+                            {deleteWarning || `This student has recorded fee transactions totaling ${formatCurrency(overall.totalPaid)}. To ensure accounting ledger integrity and government audit compliance, students with financial vouchers cannot be permanently deleted.`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-1">
+                      <p className="font-semibold text-slate-800">Recommended Alternative: Deactivate</p>
+                      <p>
+                        Deactivating sets this student's account status to <strong>Inactive</strong>, disabling new demands and payments while keeping all historical receipts accessible.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2.5 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteModal(false)}
+                        className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        Close
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDeleteModal(false);
+                          setTargetStatus('Inactive');
+                          setStatusReason('');
+                          setShowStatusModal(true);
+                        }}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Deactivate Student Instead
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleDeleteStudent} className="space-y-4">
+                    <div className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-xl text-xs text-rose-900 space-y-1">
+                      <p className="font-bold">Are you sure you want to delete this student?</p>
+                      <p>
+                        Permanently deleting <strong>{student.name}</strong> ({student.admissionNo || student.studentId}) will remove their student dossier and unbilled demands.
+                      </p>
+                      <p className="text-rose-700 font-semibold pt-1">This action cannot be undone.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Reason for Deletion
+                      </label>
+                      <input
+                        type="text"
+                        value={deleteReason}
+                        onChange={e => setDeleteReason(e.target.value)}
+                        placeholder="e.g. Erroneous duplicate student registration"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2.5 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteModal(false)}
+                        className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={deleting}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        {deleting ? 'Deleting...' : 'Permanently Delete'}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </motion.div>
             </motion.div>
           )}

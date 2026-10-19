@@ -27,7 +27,7 @@ export default function PendingFeesPage() {
 
   useEffect(() => {
     fetchPending();
-  }, [filters]);
+  }, [filters.course, filters.level, filters.batch]);
 
   const fetchPending = async () => {
     setLoading(true);

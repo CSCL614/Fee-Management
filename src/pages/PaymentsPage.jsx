@@ -27,7 +27,7 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     fetchPayments();
-  }, [pagination.page, filters]);
+  }, [pagination.page, filters.academicYear, filters.paymentMode, filters.status, filters.dateFrom, filters.dateTo]);
 
   const fetchPayments = async () => {
     setLoading(true);

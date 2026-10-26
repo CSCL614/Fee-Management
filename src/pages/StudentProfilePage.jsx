@@ -303,7 +303,7 @@ export default function StudentProfilePage() {
           {/* Metric Counters Banner */}
           <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 border-t border-slate-100">
             <div className="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/60">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Assessed Fee</p>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Fee Amount to be Collected</p>
               <p className="text-base sm:text-lg font-bold text-slate-900 mt-0.5 font-mono">{formatCurrency(overall.totalFee)}</p>
             </div>
             

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import Topbar from '../components/common/Topbar';
 import PageContainer from '../components/common/PageContainer';
 import HeroBanner from '../components/dashboard/HeroBanner';
+import FeeAnalyticsSection from '../components/dashboard/FeeAnalyticsSection';
 import api from '../services/api';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,14 +22,22 @@ import {
   AnimatedNumber, staggerContainer, staggerItem,
   fadeInUp
 } from '../utils/animations';
+import TransactionDetailsModal from '../components/common/TransactionDetailsModal';
 
 const CHART_COLORS = ['#1e3a8a', '#2563eb', '#38bdf8', '#818cf8', '#c084fc', '#f59e0b'];
 
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
+
+  // Yearly Fee Inflow State (Requirement 2)
+  const [selectedInflowYear, setSelectedInflowYear] = useState(new Date().getFullYear());
+  const [yearlyInflow, setYearlyInflow] = useState([]);
+  const [availableYears, setAvailableYears] = useState([2026, 2025, 2024]);
+  const [inflowLoading, setInflowLoading] = useState(false);
 
   // Accountant Quick Student Search State
   const [accountantSearch, setAccountantSearch] = useState('');
@@ -42,11 +51,40 @@ export default function DashboardPage() {
   const fetchDashboard = async () => {
     try {
       const res = await api.get('/reports/dashboard');
-      setStats(res.data.data);
+      const data = res.data.data;
+      setStats(data);
+      if (data.yearlyInflow) {
+        setYearlyInflow(data.yearlyInflow);
+      }
+      if (data.yearlyInflowYear) {
+        setSelectedInflowYear(data.yearlyInflowYear);
+      }
+      if (data.availableInflowYears?.length) {
+        setAvailableYears(data.availableInflowYears);
+      }
     } catch (err) {
       console.error('Failed to load dashboard statistics:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleInflowYearChange = async (year) => {
+    const yr = parseInt(year);
+    setSelectedInflowYear(yr);
+    setInflowLoading(true);
+    try {
+      const res = await api.get(`/reports/yearly-inflow?year=${yr}`);
+      if (res.data.success && res.data.data?.monthlyData) {
+        setYearlyInflow(res.data.data.monthlyData);
+        if (res.data.data.availableYears) {
+          setAvailableYears(res.data.data.availableYears);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load yearly inflow for year', yr, err);
+    } finally {
+      setInflowLoading(false);
     }
   };
 
@@ -93,12 +131,6 @@ export default function DashboardPage() {
     );
   }
 
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthlyData = (stats?.monthlyCollection || []).map(m => ({
-    name: `${monthNames[m._id.month - 1]} ${String(m._id.year).slice(2)}`,
-    amount: m.total
-  }));
-
   const modeData = (stats?.modeDistribution || []).map(m => ({
     name: m._id,
     value: m.total
@@ -109,6 +141,10 @@ export default function DashboardPage() {
   const collectionRate = totalFeeVal > 0 ? Math.round((totalCollectedVal / totalFeeVal) * 100) : 0;
 
   // Admin KPI metrics
+  const monthlyLabel = stats?.monthlyCollection?.label || 'Current Month';
+  const monthlyTotal = stats?.monthlyCollection?.total || 0;
+  const monthlyCount = stats?.monthlyCollection?.count || 0;
+
   const adminStatCards = [
     {
       label: 'Total Students',
@@ -120,7 +156,7 @@ export default function DashboardPage() {
       isCurrency: false
     },
     {
-      label: 'Total Assessed Fee',
+      label: 'Total Fee Amount to Be Collected',
       value: stats?.totalFee || 0,
       icon: IndianRupee,
       color: 'bg-indigo-50 text-indigo-600 border border-indigo-100',
@@ -147,11 +183,11 @@ export default function DashboardPage() {
       isCurrency: true
     },
     {
-      label: "Today's Collection",
-      value: stats?.todayCollection || 0,
+      label: `Monthly Collection — ${monthlyLabel}`,
+      value: monthlyTotal,
       icon: ArrowUpRight,
       color: 'bg-teal-50 text-teal-600 border border-teal-100',
-      badge: 'Daily',
+      badge: `${monthlyCount} Receipts`,
       badgeColor: 'bg-teal-50 text-teal-700 font-semibold',
       isCurrency: true
     },
@@ -160,11 +196,11 @@ export default function DashboardPage() {
   // Accountant KPI metrics (focused on daily collections and receivables)
   const accountantStatCards = [
     {
-      label: "Today's Fee Receipts",
-      value: stats?.todayCollection || 0,
+      label: `Monthly Collection — ${monthlyLabel}`,
+      value: monthlyTotal,
       icon: IndianRupee,
       color: 'bg-emerald-50 text-emerald-600 border border-emerald-100',
-      badge: 'Counter Live',
+      badge: `${monthlyCount} Receipts`,
       badgeColor: 'bg-emerald-50 text-emerald-700 font-bold',
       isCurrency: true
     },
@@ -242,28 +278,51 @@ export default function DashboardPage() {
               ))}
             </motion.div>
 
+            {/* 3 Side-by-Side Fee Analytics Pie Charts (Requirement 5) */}
+            <FeeAnalyticsSection />
+
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Monthly Collection Bar Chart */}
+              {/* Yearly Fee Inflow Bar Chart (Requirement 2) */}
               <motion.div
                 variants={fadeInUp}
                 initial="hidden"
                 animate="show"
                 className="lg:col-span-2 bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)]"
               >
-                <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 pb-3 border-b border-slate-100 gap-2">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Monthly Fee Inflow</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Aggregated fee collections across academic months</p>
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Yearly Fee Inflow</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Monthly aggregated collections across calendar year {selectedInflowYear}
+                    </p>
                   </div>
-                  <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">
-                    <Calendar className="w-3.5 h-3.5" /> Recent Months
-                  </span>
+                  
+                  {/* Dynamic Year Selector */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Calendar Year:
+                    </span>
+                    <select
+                      value={selectedInflowYear}
+                      onChange={e => handleInflowYearChange(e.target.value)}
+                      disabled={inflowLoading}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50/80 hover:bg-white focus:bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors shadow-2xs"
+                    >
+                      {availableYears.map(yr => (
+                        <option key={yr} value={yr}>Calendar Year {yr}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                {monthlyData.length > 0 ? (
+                {yearlyInflow.length > 0 ? (
                   <ResponsiveContainer width="100%" height={310}>
-                    <BarChart data={monthlyData} margin={{ top: 25, right: 15, left: -10, bottom: 0 }} barCategoryGap="16%">
+                    <BarChart
+                      data={yearlyInflow}
+                      margin={{ top: 25, right: 15, left: -10, bottom: 0 }}
+                      barCategoryGap="12%"
+                    >
                       <defs>
                         <linearGradient id="dashboardMonthlyGrad" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
@@ -271,19 +330,51 @@ export default function DashboardPage() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#475569', fontWeight: 600 }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
+                      <XAxis
+                        dataKey="month"
+                        tick={{ fontSize: 12, fill: '#475569', fontWeight: 600 }}
+                        axisLine={{ stroke: '#e2e8f0' }}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#64748b' }}
+                        tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`}
+                        axisLine={false}
+                        tickLine={false}
+                      />
                       <Tooltip
                         cursor={{ fill: 'rgba(37, 99, 235, 0.05)', radius: 6 }}
-                        formatter={(value) => [formatCurrency(value), 'Collection']}
-                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 8px 30px rgba(0,0,0,0.12)', fontSize: '12px' }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const d = payload[0].payload;
+                            return (
+                              <div className="bg-white/95 backdrop-blur-md p-3 rounded-xl border border-slate-200/90 shadow-xl text-xs z-50 min-w-44">
+                                <p className="font-bold text-slate-900 pb-1 mb-1.5 border-b border-slate-100 flex items-center justify-between">
+                                  <span>{d.fullMonth || `${d.month} ${selectedInflowYear}`}</span>
+                                  <span className="text-[10px] font-semibold text-slate-500">{d.monthName}</span>
+                                </p>
+                                <div className="space-y-1">
+                                  <div className="flex justify-between items-center text-slate-600">
+                                    <span>Collected:</span>
+                                    <span className="font-mono font-bold text-blue-700">{formatCurrency(d.amount)}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-slate-600">
+                                    <span>Transactions:</span>
+                                    <span className="font-mono font-bold text-slate-800">{d.count || 0} txn{d.count === 1 ? '' : 's'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
                       />
                       <Bar
                         dataKey="amount"
                         fill="url(#dashboardMonthlyGrad)"
                         radius={[8, 8, 0, 0]}
-                        barSize={52}
-                        maxBarSize={64}
+                        barSize={38}
+                        maxBarSize={48}
                         isAnimationActive={true}
                         animationDuration={850}
                         animationEasing="ease-out"
@@ -293,7 +384,7 @@ export default function DashboardPage() {
                           position="top"
                           formatter={v => (v > 0 ? `₹${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : '')}
                           fill="#334155"
-                          fontSize={11}
+                          fontSize={10.5}
                           fontWeight={700}
                           offset={8}
                         />
@@ -303,7 +394,7 @@ export default function DashboardPage() {
                 ) : (
                   <div className="h-64 flex flex-col items-center justify-center text-slate-400 text-sm">
                     <TrendingUp className="w-10 h-10 text-slate-300 mb-2 stroke-[1.5]" />
-                    No collection records logged for this period
+                    No collection records logged for calendar year {selectedInflowYear}
                   </div>
                 )}
               </motion.div>
@@ -742,6 +833,9 @@ export default function DashboardPage() {
               ))}
             </motion.div>
 
+            {/* 3 Side-by-Side Fee Analytics Pie Charts (Requirement 5) */}
+            <FeeAnalyticsSection />
+
             {/* Operational Split Layout: Collection Queue & Daily Channel Breakdown */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
@@ -858,8 +952,9 @@ export default function DashboardPage() {
                         {(stats?.recentPayments || []).slice(0, 5).map(p => (
                           <tr
                             key={p.receiptNo}
-                            onClick={() => navigate(p.student?.studentId ? `/students/${p.student.studentId}` : '/payments')}
-                            className="hover:bg-slate-50/80 cursor-pointer transition-colors group"
+                            onClick={() => setSelectedTransaction(p)}
+                            className="hover:bg-blue-50/60 cursor-pointer transition-colors group"
+                            title="Click to view payment details & voucher breakdown"
                           >
                             <td className="py-3 px-4">
                               <p className="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">
@@ -987,6 +1082,12 @@ export default function DashboardPage() {
             </div>
           </>
         )}
+
+        {/* Transaction Details Modal */}
+        <TransactionDetailsModal
+          payment={selectedTransaction}
+          onClose={() => setSelectedTransaction(null)}
+        />
 
       </PageContainer>
     </div>

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
 import Topbar from '../components/common/Topbar';
 import api from '../services/api';
 import { formatCurrency } from '../utils/helpers';
 import toast from 'react-hot-toast';
-import { Plus, BookOpen, Search, X, Edit2, Trash2, Layers, Check, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, BookOpen, Search, X, Edit2, Trash2, Layers, Check, Sparkles, AlertCircle, RefreshCw, ShieldCheck, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { pageVariants, modalVariants, backdropVariants } from '../utils/animations';
 
@@ -20,6 +21,7 @@ const COMMON_TERM_SUGGESTIONS = [
 ];
 
 export default function FeeStructurePage() {
+  const { isAdmin } = useAuth();
   const [structures, setStructures] = useState([]);
   const [categories, setCategories] = useState([]);
   const [academicYears, setAcademicYears] = useState([]);
@@ -348,31 +350,50 @@ export default function FeeStructurePage() {
               ))}
             </select>
 
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              type="button"
-              disabled={isGeneratingDemo}
-              onClick={handleGenerateDemoStructures}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all shadow-xs cursor-pointer"
-              title="Configure sample demo fee rates for all catalog courses for AY 2026–27"
-            >
-              <Sparkles className={`w-4 h-4 ${isGeneratingDemo ? 'animate-spin' : ''}`} />
-              <span>Generate Demo Structures (2026–27)</span>
-            </motion.button>
+            {isAdmin ? (
+              <>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  type="button"
+                  disabled={isGeneratingDemo}
+                  onClick={handleGenerateDemoStructures}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all shadow-xs cursor-pointer"
+                  title="Configure sample demo fee rates for all catalog courses for AY 2026–27"
+                >
+                  <Sparkles className={`w-4 h-4 ${isGeneratingDemo ? 'animate-spin' : ''}`} />
+                  <span>Generate Demo Structures (2026–27)</span>
+                </motion.button>
 
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              type="button"
-              onClick={() => setShowForm(!showForm)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-xs cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Structure & Terms</span>
-            </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  type="button"
+                  onClick={() => setShowForm(!showForm)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition-all shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Structure & Terms</span>
+                </motion.button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200">
+                <Lock className="w-3.5 h-3.5 text-slate-500" />
+                <span>Accountant View (Read-Only)</span>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Read-only notification banner for Accountant */}
+        {!isAdmin && (
+          <div className="flex items-center gap-2.5 p-3.5 bg-blue-50/80 border border-blue-200/80 text-blue-900 rounded-xl text-xs font-medium">
+            <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>
+              <strong>Read-Only Access:</strong> You are viewing college fee structures as an Accountant. Creating, editing, or deleting fee structures is strictly restricted to Administrators.
+            </span>
+          </div>
+        )}
 
         {/* Add Structure & Multiple Terms Form */}
         {showForm && (
@@ -860,18 +881,20 @@ export default function FeeStructurePage() {
                     </div>
 
                     <div className="flex items-center gap-3 self-end sm:self-auto">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setQuickAddModal(g);
-                          setQuickTerm({ category: '', amount: '', frequency: 'ANNUAL', semester: '' });
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-navy-50 hover:bg-navy-100 text-navy-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                        title="Add a new term and price to this structure"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add Term</span>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuickAddModal(g);
+                            setQuickTerm({ category: '', amount: '', frequency: 'ANNUAL', semester: '' });
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-navy-50 hover:bg-navy-100 text-navy-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                          title="Add a new term and price to this structure"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Term</span>
+                        </button>
+                      )}
 
                       <div className="text-right">
                         <span className="text-[11px] text-gray-400 block leading-none">Total Program Fee</span>
@@ -899,27 +922,29 @@ export default function FeeStructurePage() {
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="font-bold text-navy-900">{formatCurrency(item.amount)}</span>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingItem(item);
-                                  setEditAmount(item.amount.toString());
-                                }}
-                                title="Edit price"
-                                className="p-1 text-gray-400 hover:text-navy-600 rounded transition-colors"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(item)}
-                                title="Delete term"
-                                className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            {isAdmin && (
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingItem(item);
+                                    setEditAmount(item.amount.toString());
+                                  }}
+                                  title="Edit price"
+                                  className="p-1 text-gray-400 hover:text-navy-600 rounded transition-colors"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(item)}
+                                  title="Delete term"
+                                  className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
 

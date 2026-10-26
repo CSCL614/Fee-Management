@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import Topbar from '../components/common/Topbar';
 import api from '../services/api';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
-import { ChevronLeft, ChevronRight, History, Filter, RotateCcw, ArrowRight, Receipt, CreditCard, Calendar, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, History, Filter, RotateCcw, ArrowRight, Receipt, CreditCard, Calendar, X, Eye } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { pageVariants } from '../utils/animations';
+import TransactionDetailsModal from '../components/common/TransactionDetailsModal';
 
 export default function PaymentsPage() {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [filters, setFilters] = useState({
     academicYear: '',
@@ -229,6 +231,7 @@ export default function PaymentsPage() {
                   <th className="py-3 px-4">Reference ID</th>
                   <th className="py-3 px-4">Cashier</th>
                   <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -245,11 +248,12 @@ export default function PaymentsPage() {
                       <td className="py-3.5 px-4"><div className="w-16 h-4 skeleton rounded" /></td>
                       <td className="py-3.5 px-4"><div className="w-16 h-4 skeleton rounded" /></td>
                       <td className="py-3.5 px-4 text-center"><div className="w-14 h-4 skeleton rounded-full mx-auto" /></td>
+                      <td className="py-3.5 px-4 text-center"><div className="w-12 h-4 skeleton rounded mx-auto" /></td>
                     </tr>
                   ))
                 ) : payments.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="py-16 text-center">
+                    <td colSpan="11" className="py-16 text-center">
                       <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-2" />
                       <p className="text-sm font-semibold text-slate-800">No payment receipts found</p>
                       <p className="text-xs text-slate-400 mt-1">Try modifying your filter selections or record a new payment voucher.</p>
@@ -261,19 +265,20 @@ export default function PaymentsPage() {
                     return (
                       <tr
                         key={p.receiptNo}
-                        className={`hover:bg-slate-50/70 transition-colors ${p.status === 'cancelled' ? 'bg-rose-50/20 opacity-60' : ''}`}
+                        onClick={() => setSelectedTransaction(p)}
+                        className={`hover:bg-blue-50/50 cursor-pointer transition-colors group ${p.status === 'cancelled' ? 'bg-rose-50/20 opacity-60' : ''}`}
                       >
-                        <td className="py-3 px-4 font-mono font-bold text-xs text-blue-700">
+                        <td className="py-3 px-4 font-mono font-bold text-xs text-blue-700 group-hover:text-blue-800">
                           {p.receiptNo}
                         </td>
                         <td className="py-3 px-4 text-xs font-medium text-slate-600">{formatDate(p.paymentDate)}</td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                           {studentId ? (
                             <button
                               onClick={() => navigate(`/students/${studentId}`)}
-                              className="text-left group"
+                              className="text-left group/btn cursor-pointer"
                             >
-                              <p className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                              <p className="text-xs font-bold text-slate-800 group-hover/btn:text-blue-600 transition-colors">
                                 {p.student?.name || p.studentId}
                               </p>
                               <p className="text-[11px] text-slate-400 font-mono">{p.student?.admissionNo}</p>
@@ -305,6 +310,16 @@ export default function PaymentsPage() {
                           <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${getStatusColor(p.status)}`}>
                             {p.status}
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-center" onClick={e => e.stopPropagation()}>
+                          <button
+                            onClick={() => setSelectedTransaction(p)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50/70 hover:bg-blue-100 border border-blue-200/60 transition-colors cursor-pointer"
+                            title="View category breakdown and payment voucher"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Details</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -345,6 +360,12 @@ export default function PaymentsPage() {
             </div>
           )}
         </div>
+
+        {/* Transaction Details Modal */}
+        <TransactionDetailsModal
+          payment={selectedTransaction}
+          onClose={() => setSelectedTransaction(null)}
+        />
 
       </motion.div>
     </div>

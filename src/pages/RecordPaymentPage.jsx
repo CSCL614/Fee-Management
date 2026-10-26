@@ -19,6 +19,10 @@ export default function RecordPaymentPage() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [feeSummary, setFeeSummary] = useState(null);
   const [academicYears, setAcademicYears] = useState([]);
+  const [configuredCategories, setConfiguredCategories] = useState([]);
+  const [selectedFeeCategoryKey, setSelectedFeeCategoryKey] = useState('');
+  const [isSplitAllocation, setIsSplitAllocation] = useState(false);
+  const [splitAllocations, setSplitAllocations] = useState({});
   const [form, setForm] = useState({
     academicYear: '',
     amountPaid: '',
@@ -32,12 +36,16 @@ export default function RecordPaymentPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.get('/audit/academic-years').then(res => {
-      const years = res.data.data || [];
+    Promise.all([
+      api.get('/audit/academic-years'),
+      api.get('/fees/categories')
+    ]).then(([ayRes, catRes]) => {
+      const years = ayRes.data.data || [];
       setAcademicYears(years);
+      setConfiguredCategories(catRes.data.data || []);
       const current = years.find(y => y.isCurrent);
       if (current) setForm(prev => ({ ...prev, academicYear: current.year }));
-    });
+    }).catch(() => {});
 
     const studentId = searchParams.get('student');
     if (studentId) {
@@ -62,14 +70,25 @@ export default function RecordPaymentPage() {
     setSelectedStudent(student);
     setSearchResults([]);
     setSearch('');
+    setSelectedFeeCategoryKey('');
+    setIsSplitAllocation(false);
+    setSplitAllocations({});
     loadFeeSummary(student.studentId, form.academicYear || student.currentAcademicYear);
   };
 
   const loadFeeSummary = async (studentId, ay) => {
     try {
       const res = await api.get(`/students/${studentId}/fee-summary${ay ? `?academicYear=${ay}` : ''}`);
-      setFeeSummary(res.data.data);
-    } catch { setFeeSummary(null); }
+      const summary = res.data.data;
+      setFeeSummary(summary);
+      const cats = summary?.currentYearSummary?.categories || [];
+      const firstDue = cats.find(c => c.remainingAmount > 0) || cats[0];
+      if (firstDue) {
+        setSelectedFeeCategoryKey(`${firstDue.category}|${firstDue.semester || ''}`);
+      }
+    } catch {
+      setFeeSummary(null);
+    }
   };
 
   const handleAcademicYearChange = (ay) => {
@@ -80,19 +99,67 @@ export default function RecordPaymentPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedStudent) { toast.error('Please select a student'); return; }
-    if (!form.amountPaid || parseFloat(form.amountPaid) <= 0) { toast.error('Please enter a valid amount'); return; }
+    const amt = parseFloat(form.amountPaid);
+    if (!amt || amt <= 0) { toast.error('Please enter a valid amount'); return; }
     if (!form.academicYear) { toast.error('Please select an academic year'); return; }
+
+    let allocations = [];
+    let feeCategory = '';
+    let semester = null;
+
+    if (isSplitAllocation) {
+      allocations = Object.entries(splitAllocations)
+        .filter(([_, a]) => parseFloat(a) > 0)
+        .map(([key, a]) => {
+          const [cat, sem] = key.split('|');
+          return {
+            category: cat,
+            semester: sem || null,
+            amount: parseFloat(a),
+            academicYear: form.academicYear
+          };
+        });
+
+      if (allocations.length === 0) {
+        toast.error('Please allocate amounts across categories');
+        return;
+      }
+
+      const totalAllocated = allocations.reduce((s, a) => s + a.amount, 0);
+      if (Math.abs(totalAllocated - amt) > 0.01) {
+        toast.error(`The amount allocated across categories (₹${totalAllocated}) must equal the total receipt amount (₹${amt}).`);
+        return;
+      }
+      feeCategory = allocations.map(a => a.category).join(', ');
+    } else {
+      if (!selectedFeeCategoryKey) {
+        toast.error('Please select a fee category');
+        return;
+      }
+      const [cat, sem] = selectedFeeCategoryKey.split('|');
+      feeCategory = cat;
+      semester = sem || null;
+      allocations = [{
+        category: cat,
+        semester: sem || null,
+        amount: amt,
+        academicYear: form.academicYear
+      }];
+    }
 
     setSubmitting(true);
     try {
       const res = await api.post('/payments', {
         studentId: selectedStudent.studentId,
         academicYear: form.academicYear,
-        amountPaid: parseFloat(form.amountPaid),
+        amountPaid: amt,
         paymentDate: form.paymentDate,
         paymentMode: form.paymentMode,
         transactionId: form.transactionId,
-        remarks: form.remarks
+        remarks: form.remarks,
+        feeCategory,
+        semester,
+        allocations
       });
       setSuccess(res.data.data);
       triggerPaymentConfetti();
@@ -159,6 +226,31 @@ export default function RecordPaymentPage() {
                 <span className="text-slate-500">Payment Instrument</span>
                 <span className="font-semibold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200/70">{payment.paymentMode}</span>
               </div>
+              {payment.feeCategory && (
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500">Fee Category</span>
+                  <span className="font-semibold text-blue-700">{payment.feeCategory}</span>
+                </div>
+              )}
+              {payment.allocations && payment.allocations.length > 0 && (
+                <div className="pt-2 border-t border-slate-200/60">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-bold mb-1">
+                    Category Allocation Breakdown
+                  </span>
+                  <div className="space-y-1 bg-white p-2 rounded-lg border border-slate-200/80">
+                    {payment.allocations.map((alloc, i) => (
+                      <div key={i} className="flex justify-between items-center text-xs">
+                        <span className="text-slate-700">
+                          {alloc.category} {alloc.semester ? `(${alloc.semester})` : ''}
+                        </span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {formatCurrency(alloc.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-200/60">
                 <span className="text-emerald-700 font-bold uppercase tracking-wider">Amount Collected</span>
                 <span className="font-mono font-bold text-base text-emerald-700">{formatCurrency(payment.amountPaid)}</span>
@@ -202,6 +294,9 @@ export default function RecordPaymentPage() {
                   setSuccess(null);
                   setSelectedStudent(null);
                   setFeeSummary(null);
+                  setSelectedFeeCategoryKey('');
+                  setIsSplitAllocation(false);
+                  setSplitAllocations({});
                   setForm({
                     academicYear: form.academicYear,
                     amountPaid: '',
@@ -341,14 +436,249 @@ export default function RecordPaymentPage() {
                   <input
                     type="number"
                     value={form.amountPaid}
-                    onChange={e => setForm(prev => ({ ...prev, amountPaid: e.target.value }))}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setForm(prev => ({ ...prev, amountPaid: val }));
+                      // If single category selected and not split, allocations are auto 1:1
+                    }}
                     placeholder="Enter collected amount"
                     min="1"
                     className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-900"
                     required
                   />
                 </div>
+              </div>
 
+              {/* Fee Category Allocation Section */}
+              <div className="bg-slate-50/70 border border-slate-200/90 rounded-xl p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200/70">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Fee Category Allocation *
+                    </label>
+                    <p className="text-[11px] text-slate-500">
+                      Select target fee demand from student's active schedule
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isSplitAllocation;
+                      setIsSplitAllocation(next);
+                      if (next && currentSummary?.categories) {
+                        // initialize split allocations with current amount or empty
+                        const initial = {};
+                        currentSummary.categories.forEach(c => {
+                          const key = `${c.category}|${c.semester || ''}`;
+                          initial[key] = '';
+                        });
+                        setSplitAllocations(initial);
+                      }
+                    }}
+                    className={`text-xs px-2.5 py-1 rounded-lg font-semibold border transition-all ${
+                      isSplitAllocation
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {isSplitAllocation ? '✓ Split Mode Active' : '+ Split Across Categories'}
+                  </button>
+                </div>
+
+                {!isSplitAllocation ? (
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Select Fee Category
+                    </label>
+                    <select
+                      value={selectedFeeCategoryKey}
+                      onChange={e => {
+                        const key = e.target.value;
+                        setSelectedFeeCategoryKey(key);
+                        // Auto-fill outstanding amount for convenience if amount is empty
+                        if (currentSummary?.categories) {
+                          const matched = currentSummary.categories.find(
+                            c => `${c.category}|${c.semester || ''}` === key
+                          );
+                          if (matched && matched.remainingAmount > 0 && !form.amountPaid) {
+                            setForm(prev => ({ ...prev, amountPaid: matched.remainingAmount.toString() }));
+                          }
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-800 font-semibold"
+                    >
+                      <option value="">-- Choose Category --</option>
+                      {/* Applicable categories from student demands */}
+                      {currentSummary?.categories?.map((cat, idx) => (
+                        <option
+                          key={`cat-${idx}`}
+                          value={`${cat.category}|${cat.semester || ''}`}
+                        >
+                          {cat.category} {cat.semester ? `(${cat.semester})` : ''} — Outstanding Due: ₹{cat.remainingAmount?.toLocaleString('en-IN') ?? 0} (Assessed: ₹{cat.amount?.toLocaleString('en-IN') ?? 0})
+                        </option>
+                      ))}
+                      {/* Fallback to configured categories if not yet in demand */}
+                      {configuredCategories
+                        ?.filter(c => !currentSummary?.categories?.some(sc => sc.category === c.name))
+                        .map(c => (
+                          <option key={`cfg-${c.name}`} value={`${c.name}|`}>
+                            {c.name} (General / Unassessed)
+                          </option>
+                        ))}
+                    </select>
+
+                    {/* Active Selected Category Summary Card */}
+                    {selectedFeeCategoryKey && (() => {
+                      const [catName, catSem] = selectedFeeCategoryKey.split('|');
+                      const catData = currentSummary?.categories?.find(
+                        c => c.category === catName && (c.semester || '') === catSem
+                      );
+                      const catAssessed = catData?.amount || 0;
+                      const catPaid = catData?.paidAmount || 0;
+                      const catDue = catData?.remainingAmount || 0;
+                      const enteredAmount = parseFloat(form.amountPaid) || 0;
+                      const postPaymentDue = Math.max(0, catDue - enteredAmount);
+
+                      return (
+                        <div className="mt-3 p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                          <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-100">
+                            <div>
+                              <span className="font-bold text-slate-900">{catName}</span>
+                              {catSem && <span className="ml-1.5 px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-mono font-bold">{catSem}</span>}
+                            </div>
+                            {catDue > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setForm(prev => ({ ...prev, amountPaid: catDue.toString() }))}
+                                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                              >
+                                Auto-fill Due (₹{catDue.toLocaleString('en-IN')})
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-center text-xs">
+                            <div className="p-1.5 bg-slate-50 rounded-lg">
+                              <span className="text-[10px] text-slate-500 uppercase block">Assessed Fee</span>
+                              <span className="font-mono font-bold text-slate-700">₹{catAssessed.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="p-1.5 bg-slate-50 rounded-lg">
+                              <span className="text-[10px] text-slate-500 uppercase block">Paid So Far</span>
+                              <span className="font-mono font-bold text-emerald-600">₹{catPaid.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="p-1.5 bg-amber-50/70 border border-amber-200/50 rounded-lg">
+                              <span className="text-[10px] text-amber-800 uppercase block">Current Due</span>
+                              <span className="font-mono font-bold text-amber-700">₹{catDue.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="p-1.5 bg-blue-50/70 border border-blue-200/50 rounded-lg">
+                              <span className="text-[10px] text-blue-800 uppercase block">Post Payment Due</span>
+                              <span className="font-mono font-bold text-blue-700">₹{postPaymentDue.toLocaleString('en-IN')}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  /* Multi-Category Split Allocation Controls */
+                  <div className="space-y-2.5">
+                    <p className="text-[11px] text-slate-600">
+                      Enter the exact portion of payment allocated toward each fee category. The sum must match Receipt Amount.
+                    </p>
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {currentSummary?.categories?.map((cat, idx) => {
+                        const key = `${cat.category}|${cat.semester || ''}`;
+                        const allocatedVal = splitAllocations[key] || '';
+                        return (
+                          <div
+                            key={idx}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl gap-2 text-xs"
+                          >
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-slate-800">{cat.category}</span>
+                                {cat.semester && (
+                                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-mono">
+                                    {cat.semester}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10.5px] text-slate-500">
+                                Outstanding Due: <strong className="text-amber-700 font-mono">₹{cat.remainingAmount?.toLocaleString('en-IN') ?? 0}</strong> (Assessed: ₹{cat.amount?.toLocaleString('en-IN') ?? 0})
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {cat.remainingAmount > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSplitAllocations(prev => {
+                                      const next = { ...prev, [key]: cat.remainingAmount.toString() };
+                                      const total = Object.values(next).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+                                      setForm(f => ({ ...f, amountPaid: total ? total.toString() : f.amountPaid }));
+                                      return next;
+                                    });
+                                  }}
+                                  className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold"
+                                >
+                                  Full Due
+                                </button>
+                              )}
+                              <div className="relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={allocatedVal}
+                                  placeholder="0"
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setSplitAllocations(prev => {
+                                      const next = { ...prev, [key]: val };
+                                      const total = Object.values(next).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+                                      setForm(f => ({ ...f, amountPaid: total ? total.toString() : f.amountPaid }));
+                                      return next;
+                                    });
+                                  }}
+                                  className="w-28 pl-6 pr-2.5 py-1.5 border border-slate-200 rounded-lg font-mono font-bold text-right text-xs focus:ring-1 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Split Allocation Balance Bar */}
+                    {(() => {
+                      const totalAllocated = Object.values(splitAllocations).reduce(
+                        (s, v) => s + (parseFloat(v) || 0),
+                        0
+                      );
+                      const receiptAmt = parseFloat(form.amountPaid) || 0;
+                      const diff = receiptAmt - totalAllocated;
+                      const isMatch = Math.abs(diff) < 0.01 && totalAllocated > 0;
+
+                      return (
+                        <div className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                          isMatch
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                            : 'bg-amber-50 border-amber-200 text-amber-800'
+                        }`}>
+                          <span className="font-semibold">
+                            Total Allocated: <strong className="font-mono">₹{totalAllocated.toLocaleString('en-IN')}</strong> / Receipt: <strong className="font-mono">₹{receiptAmt.toLocaleString('en-IN')}</strong>
+                          </span>
+                          <span className="font-bold text-[11px]">
+                            {isMatch ? '✓ Fully Matched' : diff > 0 ? `₹${diff.toLocaleString('en-IN')} Unallocated` : `₹${Math.abs(diff).toLocaleString('en-IN')} Overallocated`}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Payment Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Transaction Date *
@@ -408,7 +738,7 @@ export default function RecordPaymentPage() {
                 <button
                   type="submit"
                   disabled={submitting || !selectedStudent}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-sm disabled:opacity-50 text-xs tracking-wider uppercase flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-sm disabled:opacity-50 text-xs tracking-wider uppercase flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Lock className="w-4 h-4" />
                   {submitting ? 'Posting Voucher...' : 'Generate Receipt & Post to Ledger'}

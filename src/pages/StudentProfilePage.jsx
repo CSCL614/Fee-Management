@@ -10,15 +10,18 @@ import {
   CreditCard, Mail, Download, User, Phone, AtSign, BookOpen,
   GraduationCap, Calendar, ArrowLeft, Edit, ShieldCheck, Lock,
   AlertCircle, Receipt, FileText, CheckCircle2, History, AlertTriangle, X,
-  Power, RotateCcw, Trash2
+  Power, RotateCcw, Trash2, Eye
 } from 'lucide-react';
 import { modalVariants, backdropVariants, pageVariants } from '../utils/animations';
+import TransactionDetailsModal from '../components/common/TransactionDetailsModal';
+import StudentFeeAnalyticsSection from '../components/student/StudentFeeAnalyticsSection';
 
 export default function StudentProfilePage() {
   const { id } = useParams();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('fee-summary');
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
 
@@ -348,6 +351,12 @@ export default function StudentProfilePage() {
           </div>
         )}
 
+        {/* Student Individual Fee Analytics & Visual Pie Charts */}
+        <StudentFeeAnalyticsSection
+          feeSummary={feeSummary}
+          studentName={student.name}
+        />
+
         {/* Tab Controls Bar with Sliding layoutId Active Indicator */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-1 shadow-2xs flex overflow-x-auto gap-1">
           {tabs.map(tab => {
@@ -486,9 +495,10 @@ export default function StudentProfilePage() {
                         .map(p => (
                           <tr
                             key={p.receiptNo}
-                            className={`hover:bg-slate-50/70 transition-colors ${p.status === 'Cancelled' ? 'bg-rose-50/30 opacity-70' : ''}`}
+                            onClick={() => setSelectedTransaction({ ...p, student: data.student })}
+                            className={`hover:bg-blue-50/50 cursor-pointer transition-colors ${p.status === 'Cancelled' ? 'bg-rose-50/30 opacity-70' : ''}`}
                           >
-                            <td className="py-3 px-4 font-mono font-semibold text-xs text-blue-700">
+                            <td className="py-3 px-4 font-mono font-bold text-xs text-blue-700 hover:underline">
                               {p.receiptNo}
                             </td>
                             <td className="py-3 px-4 text-xs font-medium text-slate-600">{formatDate(p.paymentDate)}</td>
@@ -513,36 +523,46 @@ export default function StudentProfilePage() {
                                 </span>
                               )}
                             </td>
-                            <td className="py-3 px-4 text-right">
-                              {p.status !== 'Cancelled' && (
-                                isAdmin ? (
-                                  <div className="flex items-center justify-end gap-2">
-                                    <button
-                                      onClick={() => {
-                                        setActionModal({ type: 'edit', payment: p });
-                                        setEditAmount(p.amountPaid.toString());
-                                        setReason('');
-                                      }}
-                                      className="text-xs text-blue-600 hover:text-blue-800 font-semibold px-2 py-1 rounded hover:bg-blue-50 transition-colors"
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setActionModal({ type: 'cancel', payment: p });
-                                        setReason('');
-                                      }}
-                                      className="text-xs text-rose-600 hover:text-rose-800 font-semibold px-2 py-1 rounded hover:bg-rose-50 transition-colors"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <span className="text-[11px] text-slate-400 font-medium inline-flex items-center gap-1" title="Payments are locked. Contact Admin for changes.">
-                                    <Lock className="w-3 h-3" /> Locked
-                                  </span>
-                                )
-                              )}
+                            <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setSelectedTransaction({ ...p, student: data.student })}
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold px-2 py-1 rounded hover:bg-blue-50 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                  title="View breakdown & voucher"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>Details</span>
+                                </button>
+                                {p.status !== 'Cancelled' && (
+                                  isAdmin ? (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          setActionModal({ type: 'edit', payment: p });
+                                          setEditAmount(p.amountPaid.toString());
+                                          setReason('');
+                                        }}
+                                        className="text-xs text-amber-600 hover:text-amber-800 font-semibold px-2 py-1 rounded hover:bg-amber-50 transition-colors cursor-pointer"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setActionModal({ type: 'cancel', payment: p });
+                                          setReason('');
+                                        }}
+                                        className="text-xs text-rose-600 hover:text-rose-800 font-semibold px-2 py-1 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400 font-medium inline-flex items-center gap-1" title="Payments are locked. Contact Admin for changes.">
+                                      <Lock className="w-3 h-3" /> Locked
+                                    </span>
+                                  )
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -562,6 +582,8 @@ export default function StudentProfilePage() {
                     <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                       <th className="py-3 px-4">Date</th>
                       <th className="py-3 px-4">Particulars / Description</th>
+                      <th className="py-3 px-4">Fee Category</th>
+                      <th className="py-3 px-4">Academic Year</th>
                       <th className="py-3 px-4 text-right">Debit (Fee Assessed)</th>
                       <th className="py-3 px-4 text-right">Credit (Receipts)</th>
                       <th className="py-3 px-4 text-right">Running Balance</th>
@@ -570,36 +592,81 @@ export default function StudentProfilePage() {
                   <tbody className="divide-y divide-slate-100 font-mono text-xs">
                     {(feeLedger?.entries || []).length === 0 ? (
                       <tr>
-                        <td colSpan="5" className="py-12 text-center text-slate-400 font-sans text-xs">
+                        <td colSpan="7" className="py-12 text-center text-slate-400 font-sans text-xs">
                           <History className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                           No accounting ledger entries posted
                         </td>
                       </tr>
                     ) : (
-                      feeLedger.entries.map((e, i) => (
-                        <tr key={i} className={`hover:bg-slate-50/70 transition-colors ${e.type === 'cancellation' ? 'bg-rose-50/30' : ''}`}>
-                          <td className="py-3 px-4 text-slate-600 font-sans">{formatDate(e.date)}</td>
-                          <td className="py-3 px-4 text-slate-800 font-sans font-medium">{e.description}</td>
-                          <td className="py-3 px-4 text-right font-semibold text-rose-600">
-                            {e.debit > 0 ? formatCurrency(e.debit) : '—'}
-                          </td>
-                          <td className="py-3 px-4 text-right font-semibold text-emerald-600">
-                            {e.credit > 0 ? formatCurrency(e.credit) : '—'}
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-slate-900">
-                            {formatCurrency(e.balance)}
-                          </td>
-                        </tr>
-                      ))
+                      feeLedger.entries.map((e, i) => {
+                        const isPayment = e.type === 'payment' || (e.credit && e.credit > 0) || Boolean(e.receiptNo);
+                        return (
+                          <tr
+                            key={i}
+                            onClick={() => {
+                              if (isPayment) {
+                                setSelectedTransaction({
+                                  ...e,
+                                  student: data.student,
+                                  amountPaid: e.credit || e.amountPaid,
+                                  paymentDate: e.date || e.paymentDate,
+                                  feeCategory: e.category,
+                                  receiptNo: e.receiptNo || (e.description?.includes('Receipt #') ? e.description.split('#')[1]?.trim()?.split(' ')[0] : undefined)
+                                });
+                              }
+                            }}
+                            className={`transition-colors ${isPayment ? 'hover:bg-blue-50/50 cursor-pointer' : 'hover:bg-slate-50/70'} ${e.type === 'cancellation' ? 'bg-rose-50/30' : ''}`}
+                          >
+                            <td className="py-3 px-4 text-slate-600 font-sans whitespace-nowrap">{formatDate(e.date)}</td>
+                            <td className="py-3 px-4 text-slate-800 font-sans font-medium">
+                              <div className="flex items-center gap-1.5">
+                                <span>{e.description}</span>
+                                {isPayment && (
+                                  <span className="text-[10px] text-blue-600 font-semibold px-1.5 py-0.2 rounded bg-blue-50 border border-blue-100 flex items-center gap-0.5" title="Click to view full payment breakdown">
+                                    <Eye className="w-3 h-3" /> View Details
+                                  </span>
+                                )}
+                              </div>
+                              {e.allocations && e.allocations.length > 1 && (
+                                <div className="text-[10px] text-slate-500 font-sans mt-0.5 flex flex-wrap gap-1">
+                                  <span>Breakdown:</span>
+                                  {e.allocations.map((a, aIdx) => (
+                                    <span key={aIdx} className="bg-slate-100 px-1 py-0.2 rounded font-mono">
+                                      {a.category}: {formatCurrency(a.amount)}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-sans whitespace-nowrap">
+                              <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                                {e.category || 'General Fee'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-sans text-slate-600 font-medium whitespace-nowrap">
+                              {e.academicYear || '—'}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-rose-600 whitespace-nowrap">
+                              {e.debit > 0 ? formatCurrency(e.debit) : '—'}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-emerald-600 whitespace-nowrap">
+                              {e.credit > 0 ? formatCurrency(e.credit) : '—'}
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-slate-900 whitespace-nowrap">
+                              {formatCurrency(e.balance)}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                   {feeLedger?.entries?.length > 0 && (
                     <tfoot>
                       <tr className="bg-slate-50 border-t-2 border-slate-200 text-xs">
-                        <td colSpan="4" className="py-3 px-4 font-bold text-slate-800 text-right uppercase tracking-wider">
+                        <td colSpan="6" className="py-3 px-4 font-bold text-slate-800 text-right uppercase tracking-wider">
                           Net Ledger Closing Balance:
                         </td>
-                        <td className="py-3 px-4 font-mono font-bold text-slate-900 text-right text-sm">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-900 text-right text-sm whitespace-nowrap">
                           {formatCurrency(feeLedger.closingBalance)}
                         </td>
                       </tr>
@@ -973,6 +1040,12 @@ export default function StudentProfilePage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Transaction Details Modal */}
+        <TransactionDetailsModal
+          payment={selectedTransaction}
+          onClose={() => setSelectedTransaction(null)}
+        />
 
       </motion.div>
     </div>

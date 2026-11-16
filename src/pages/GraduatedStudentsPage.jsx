@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Topbar from '../components/common/Topbar';
 import api from '../services/api';
@@ -71,6 +71,20 @@ export default function GraduatedStudentsPage() {
     universityRegNo: '',
     finalSemester: 'Semester VI',
     resultDate: ''
+  });
+
+  // Bulk Graduation State
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
+  const [showBulkGraduateModal, setShowBulkGraduateModal] = useState(false);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [suggestionSearch, setSuggestionSearch] = useState('');
+  const [suggestionCourse, setSuggestionCourse] = useState('All');
+  const [bulkForm, setBulkForm] = useState({
+    passingYear: new Date().getFullYear(),
+    passingAcademicYear: '',
+    completionDate: new Date().toISOString().split('T')[0],
+    graduationRemarks: '',
+    defaultResultStatus: 'Passed'
   });
 
   useEffect(() => {
@@ -317,6 +331,77 @@ export default function GraduatedStudentsPage() {
       toast.error(err.response?.data?.message || 'Failed to graduate student');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const filteredSuggestions = useMemo(() => {
+    return (Array.isArray(suggestions) ? suggestions : []).filter(candidate => {
+      if (!candidate) return false;
+      const s = suggestionSearch.toLowerCase().trim();
+      const matchesSearch = !s ||
+        candidate.name?.toLowerCase().includes(s) ||
+        candidate.studentId?.toLowerCase().includes(s) ||
+        candidate.admissionNo?.toLowerCase().includes(s);
+      const matchesCourse = suggestionCourse === 'All' || candidate.course === suggestionCourse;
+      return matchesSearch && matchesCourse;
+    });
+  }, [suggestions, suggestionSearch, suggestionCourse]);
+
+  const toggleCandidateSelection = (id) => {
+    setSelectedCandidateIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = filteredSuggestions.map(c => c._id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedCandidateIds.includes(id));
+    if (allSelected) {
+      setSelectedCandidateIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedCandidateIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const openBulkGraduateModal = () => {
+    if (selectedCandidateIds.length === 0) {
+      toast.error('Please select at least one candidate to graduate');
+      return;
+    }
+    const selectedObjs = suggestions.filter(s => selectedCandidateIds.includes(s._id));
+    const sample = selectedObjs[0] || {};
+    setBulkForm({
+      passingYear: sample.suggestedPassingYear || new Date().getFullYear(),
+      passingAcademicYear: sample.suggestedPassingAcademicYear || sample.currentAcademicYear || '',
+      completionDate: new Date().toISOString().split('T')[0],
+      graduationRemarks: `Bulk graduated cohort of ${selectedCandidateIds.length} students`,
+      defaultResultStatus: 'Passed'
+    });
+    setShowBulkGraduateModal(true);
+  };
+
+  const handleBulkGraduateSubmit = async (e) => {
+    e.preventDefault();
+    if (selectedCandidateIds.length === 0) return;
+    setBulkSubmitting(true);
+    try {
+      const res = await api.post('/students/bulk-graduate', {
+        studentIds: selectedCandidateIds,
+        passingYear: parseInt(bulkForm.passingYear, 10),
+        passingAcademicYear: bulkForm.passingAcademicYear,
+        completionDate: bulkForm.completionDate,
+        graduationRemarks: bulkForm.graduationRemarks,
+        defaultResultStatus: bulkForm.defaultResultStatus
+      });
+      toast.success(res.data.message || `Successfully graduated ${selectedCandidateIds.length} student(s)!`);
+      setShowBulkGraduateModal(false);
+      setSelectedCandidateIds([]);
+      fetchSuggestions();
+      fetchGraduated();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to bulk graduate students');
+    } finally {
+      setBulkSubmitting(false);
     }
   };
 
@@ -1028,9 +1113,65 @@ export default function GraduatedStudentsPage() {
               <div className="text-xs text-purple-900 leading-relaxed">
                 <span className="font-bold">Intelligent Graduation Eligibility Suggestions:</span>
                 <p className="text-[11px] text-purple-800 mt-0.5">
-                  The system scans active students against official course catalog duration and admission year progression. Review and graduate eligible students into Alumni status with a single click.
+                  The system scans active students against official course catalog duration and admission year progression. Review and graduate eligible students into Alumni status individually or in bulk.
                 </p>
               </div>
+            </div>
+
+            {/* Filter and Bulk Action Toolbar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+              <div className="flex items-center gap-2 flex-1">
+                <div className="relative flex-1 max-w-xs">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, ID, adm no..."
+                    value={suggestionSearch}
+                    onChange={e => setSuggestionSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-purple-500"
+                  />
+                </div>
+                <select
+                  value={suggestionCourse}
+                  onChange={e => setSuggestionCourse(e.target.value)}
+                  className="px-2.5 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 outline-none"
+                >
+                  <option value="All">All Courses</option>
+                  {(courses || []).map(c => {
+                    const cName = c.courseName || `${c.degree || ''} ${c.specialization || ''}`.trim();
+                    return (
+                      <option key={c._id || cName} value={cName}>
+                        {cName}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {selectedCandidateIds.length > 0 ? (
+                <div className="flex items-center gap-2 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-xl">
+                  <span className="text-xs font-bold text-purple-900">
+                    {selectedCandidateIds.length} candidate(s) selected
+                  </span>
+                  <button
+                    onClick={openBulkGraduateModal}
+                    className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                  >
+                    <GraduationCap className="w-3.5 h-3.5" />
+                    <span>Graduate Selected ({selectedCandidateIds.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setSelectedCandidateIds([])}
+                    className="text-xs text-purple-700 hover:text-purple-900 font-semibold cursor-pointer px-1"
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500 font-medium self-center">
+                  Showing {filteredSuggestions.length} eligible candidates
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] overflow-hidden">
@@ -1038,6 +1179,15 @@ export default function GraduatedStudentsPage() {
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="w-10 py-3 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={filteredSuggestions.length > 0 && filteredSuggestions.every(c => selectedCandidateIds.includes(c._id))}
+                          onChange={toggleSelectAllVisible}
+                          className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                          title="Select all visible candidates"
+                        />
+                      </th>
                       <th className="py-3 px-3">Student Name</th>
                       <th className="py-3 px-3">Course / Duration</th>
                       <th className="py-3 px-3">Current Class</th>
@@ -1050,71 +1200,85 @@ export default function GraduatedStudentsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {suggestionsLoading ? (
                       <tr>
-                        <td colSpan="7" className="py-12 text-center text-slate-400">
+                        <td colSpan="8" className="py-12 text-center text-slate-400">
                           <div className="w-6 h-6 border-2 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-2" />
                           Analyzing active student directory for graduation eligibility...
                         </td>
                       </tr>
-                    ) : suggestions.length === 0 ? (
+                    ) : filteredSuggestions.length === 0 ? (
                       <tr>
-                        <td colSpan="7" className="py-12 text-center text-slate-400 font-sans">
+                        <td colSpan="8" className="py-12 text-center text-slate-400 font-sans">
                           <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                          No active students currently pending graduation. All student years are up to date!
+                          {suggestions.length === 0
+                            ? 'No active students currently pending graduation. All student years are up to date!'
+                            : 'No candidates matched the current search or filter criteria.'}
                         </td>
                       </tr>
                     ) : (
-                      (Array.isArray(suggestions) ? suggestions : []).map(candidate => {
+                      filteredSuggestions.map(candidate => {
                         if (!candidate) return null;
+                        const isSelected = selectedCandidateIds.includes(candidate._id);
                         return (
-                          <tr key={candidate._id || candidate.studentId} className="hover:bg-purple-50/30 transition-colors">
-                          <td className="py-3 px-3">
-                            <span className="font-bold text-slate-900 block">{candidate.name}</span>
-                            <span className="text-[11px] text-slate-500 font-mono">
-                              Adm: {candidate.admissionNo} · ID: {candidate.studentId}
-                            </span>
-                          </td>
-
-                          <td className="py-3 px-3">
-                            <span className="font-semibold text-slate-800 block">{candidate.course}</span>
-                            <span className="text-[10.5px] text-slate-500">{candidate.duration} Years Course</span>
-                          </td>
-
-                          <td className="py-3 px-3 font-semibold text-purple-700">
-                            {candidate.currentYear}
-                          </td>
-
-                          <td className="py-3 px-3">
-                            {candidate.reasons?.map((r, rIdx) => (
-                              <span key={rIdx} className="inline-block text-[10.5px] bg-purple-50 text-purple-800 border border-purple-100 px-1.5 py-0.2 rounded font-medium">
-                                {r}
+                          <tr
+                            key={candidate._id || candidate.studentId}
+                            className={`transition-colors ${isSelected ? 'bg-purple-50/60' : 'hover:bg-purple-50/30'}`}
+                          >
+                            <td className="w-10 py-3 px-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleCandidateSelection(candidate._id)}
+                                className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                              />
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="font-bold text-slate-900 block">{candidate.name}</span>
+                              <span className="text-[11px] text-slate-500 font-mono">
+                                Adm: {candidate.admissionNo} · ID: {candidate.studentId}
                               </span>
-                            ))}
-                          </td>
+                            </td>
 
-                          <td className="py-3 px-3 font-mono font-bold text-slate-800">
-                            Class of {candidate.suggestedPassingYear}
-                          </td>
+                            <td className="py-3 px-3">
+                              <span className="font-semibold text-slate-800 block">{candidate.course}</span>
+                              <span className="text-[10.5px] text-slate-500">{candidate.duration} Years Course</span>
+                            </td>
 
-                          <td className="py-3 px-3 text-right font-mono">
-                            {candidate.totalPending > 0 ? (
-                              <span className="text-rose-600 font-bold">
-                                Dues: {formatCurrency(candidate.totalPending)}
-                              </span>
-                            ) : (
-                              <span className="text-emerald-700 font-bold">Cleared</span>
-                            )}
-                          </td>
+                            <td className="py-3 px-3 font-semibold text-purple-700">
+                              {candidate.currentYear}
+                            </td>
 
-                          <td className="py-3 px-3 text-right">
-                            <button
-                              onClick={() => openGraduateModalForCandidate(candidate)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                            >
-                              <GraduationCap className="w-3.5 h-3.5" />
-                              <span>Graduate</span>
-                            </button>
-                          </td>
-                        </tr>
+                            <td className="py-3 px-3">
+                              {candidate.reasons?.map((r, rIdx) => (
+                                <span key={rIdx} className="inline-block text-[10.5px] bg-purple-50 text-purple-800 border border-purple-100 px-1.5 py-0.2 rounded font-medium">
+                                  {r}
+                                </span>
+                              ))}
+                            </td>
+
+                            <td className="py-3 px-3 font-mono font-bold text-slate-800">
+                              Class of {candidate.suggestedPassingYear}
+                            </td>
+
+                            <td className="py-3 px-3 text-right font-mono">
+                              {candidate.totalPending > 0 ? (
+                                <span className="text-rose-600 font-bold">
+                                  Dues: {formatCurrency(candidate.totalPending)}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-700 font-bold">Cleared</span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                onClick={() => openGraduateModalForCandidate(candidate)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                              >
+                                <GraduationCap className="w-3.5 h-3.5" />
+                                <span>Graduate</span>
+                              </button>
+                            </td>
+                          </tr>
                         );
                       })
                     )}
@@ -1517,6 +1681,157 @@ export default function GraduatedStudentsPage() {
                       className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs disabled:opacity-50"
                     >
                       {submitting ? 'Graduating...' : 'Confirm Graduation'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* MODAL: BULK GRADUATE CANDIDATES */}
+        <AnimatePresence>
+          {showBulkGraduateModal && selectedCandidateIds.length > 0 && (
+            <motion.div
+              variants={backdropVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={() => setShowBulkGraduateModal(false)}
+              className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+            >
+              <motion.div
+                variants={modalVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                onClick={e => e.stopPropagation()}
+                className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+              >
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+                      <GraduationCap className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">Bulk Graduate Students to Alumni</h3>
+                      <p className="text-[11px] text-slate-500">Graduating {selectedCandidateIds.length} Selected Candidates</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowBulkGraduateModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-xs text-purple-950 space-y-1.5">
+                  <div className="flex items-center justify-between font-bold">
+                    <span>Selected Candidates ({selectedCandidateIds.length})</span>
+                    <span className="text-[11px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full font-mono">
+                      Batch Operation
+                    </span>
+                  </div>
+                  <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                    {suggestions
+                      .filter(s => selectedCandidateIds.includes(s._id))
+                      .map((cand, idx) => (
+                        <div key={idx} className="flex justify-between text-[11px] bg-white/70 px-2 py-1 rounded">
+                          <span className="font-semibold text-slate-800">{cand.name}</span>
+                          <span className="text-slate-500">{cand.course} • Adm: {cand.admissionNo}</span>
+                        </div>
+                      ))}
+                  </div>
+                  <p className="text-[10.5px] text-purple-800 pt-1">
+                    Financial records, fee ledger history, and pending balances are fully preserved.
+                  </p>
+                </div>
+
+                <form onSubmit={handleBulkGraduateSubmit} className="space-y-3 text-xs">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Passing Year *</label>
+                      <input
+                        type="number"
+                        min="2000"
+                        max="2099"
+                        value={bulkForm.passingYear}
+                        onChange={e => setBulkForm({ ...bulkForm, passingYear: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono font-bold outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Academic Session</label>
+                      <input
+                        type="text"
+                        value={bulkForm.passingAcademicYear}
+                        onChange={e => setBulkForm({ ...bulkForm, passingAcademicYear: e.target.value })}
+                        placeholder="e.g. 2025-26"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Completion Date</label>
+                      <input
+                        type="date"
+                        value={bulkForm.completionDate}
+                        onChange={e => setBulkForm({ ...bulkForm, completionDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Default Result Status</label>
+                      <select
+                        value={bulkForm.defaultResultStatus}
+                        onChange={e => setBulkForm({ ...bulkForm, defaultResultStatus: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 outline-none"
+                      >
+                        <option value="Passed">Passed</option>
+                        <option value="First Class Distinction">First Class Distinction</option>
+                        <option value="First Class">First Class</option>
+                        <option value="Second Class">Second Class</option>
+                        <option value="Passed with Compartment">Passed with Compartment</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Batch Remarks</label>
+                    <textarea
+                      rows="2"
+                      value={bulkForm.graduationRemarks}
+                      onChange={e => setBulkForm({ ...bulkForm, graduationRemarks: e.target.value })}
+                      placeholder="e.g. Completed degree curriculum; promoted to alumni."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none resize-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkGraduateModal(false)}
+                      className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={bulkSubmitting}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {bulkSubmitting ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>Graduating {selectedCandidateIds.length} Students...</span>
+                        </>
+                      ) : (
+                        <>
+                          <GraduationCap className="w-4 h-4" />
+                          <span>Confirm Bulk Graduation ({selectedCandidateIds.length})</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>

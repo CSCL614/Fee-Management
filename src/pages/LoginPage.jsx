@@ -87,7 +87,11 @@ export default function LoginPage() {
 
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid credentials. Please verify your username and password.');
+      if (!err.response) {
+        setError('Cannot reach server. Please ensure the backend server is running on port 5000.');
+      } else {
+        setError(err.response?.data?.message || 'Invalid credentials. Please verify your username and password.');
+      }
     } finally {
       setLoading(false);
     }

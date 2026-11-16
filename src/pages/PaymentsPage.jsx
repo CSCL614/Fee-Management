@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Topbar from '../components/common/Topbar';
 import api from '../services/api';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
-import { ChevronLeft, ChevronRight, History, Filter, RotateCcw, ArrowRight, Receipt, CreditCard, Calendar, X, Eye } from 'lucide-react';
+import { ChevronLeft, ChevronRight, History, Filter, RotateCcw, ArrowRight, Receipt, CreditCard, Calendar, X, Eye, Search } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { pageVariants } from '../utils/animations';
 import TransactionDetailsModal from '../components/common/TransactionDetailsModal';
@@ -13,7 +13,9 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
+  const [receiptInput, setReceiptInput] = useState('');
   const [filters, setFilters] = useState({
+    receiptNo: '',
     academicYear: '',
     paymentMode: '',
     status: '',
@@ -27,9 +29,18 @@ export default function PaymentsPage() {
     api.get('/audit/academic-years').then(res => setAcademicYears(res.data.data || []));
   }, []);
 
+  // Debounce receipt number search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters(prev => ({ ...prev, receiptNo: receiptInput.trim() }));
+      setPagination(prev => ({ ...prev, page: 1 }));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [receiptInput]);
+
   useEffect(() => {
     fetchPayments();
-  }, [pagination.page, filters.academicYear, filters.paymentMode, filters.status, filters.dateFrom, filters.dateTo]);
+  }, [pagination.page, filters.receiptNo, filters.academicYear, filters.paymentMode, filters.status, filters.dateFrom, filters.dateTo]);
 
   const fetchPayments = async () => {
     setLoading(true);
@@ -47,7 +58,9 @@ export default function PaymentsPage() {
   };
 
   const handleResetFilters = () => {
+    setReceiptInput('');
     setFilters({
+      receiptNo: '',
       academicYear: '',
       paymentMode: '',
       status: '',
@@ -72,6 +85,7 @@ export default function PaymentsPage() {
   };
 
   const activeFiltersCount = [
+    filters.receiptNo,
     filters.academicYear,
     filters.paymentMode,
     filters.status,
@@ -117,6 +131,28 @@ export default function PaymentsPage() {
 
           {/* Filter Dropdowns Row */}
           <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2.5 text-xs">
+            {/* Search by Receipt Number, Student Name, Roll No, or Txn ID */}
+            <div className="relative min-w-[240px] flex-1 sm:max-w-xs">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                value={receiptInput}
+                onChange={e => setReceiptInput(e.target.value)}
+                placeholder="Search receipt no, student name, admission no..."
+                className="w-full pl-8 pr-7 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:border-blue-500 font-medium placeholder:text-slate-400 font-mono"
+              />
+              {receiptInput && (
+                <button
+                  type="button"
+                  onClick={() => setReceiptInput('')}
+                  className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  title="Clear receipt search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center gap-1.5 font-bold text-slate-500 uppercase tracking-wider text-[11px] mr-1">
               <Filter className="w-3.5 h-3.5" /> Filter:
             </div>

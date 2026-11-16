@@ -2,12 +2,16 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Topbar from '../components/common/Topbar';
+import StudentAvatar from '../components/common/StudentAvatar';
+import StudentSearchInput from '../components/common/StudentSearchInput';
 import api from '../services/api';
 import { formatCurrency, getStatusColor } from '../utils/helpers';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
 import {
   UserPlus, Filter, ChevronLeft, ChevronRight, Users as UsersIcon,
-  Search, X, RotateCcw, ArrowRight, CheckCircle2, AlertCircle, FileSpreadsheet, Edit
+  Search, X, RotateCcw, ArrowRight, FileSpreadsheet, Edit,
+  Trash2, AlertTriangle, CheckSquare, Square, MinusSquare, ShieldAlert, Loader2
 } from 'lucide-react';
 import { pageVariants } from '../utils/animations';
 
@@ -19,8 +23,16 @@ export default function StudentsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [courses, setCourses] = useState([]);
   const [batches, setBatches] = useState([]);
-  const { isAdmin } = useAuth();
+  const { isAdmin, isAccountant } = useAuth();
   const navigate = useNavigate();
+
+  // Multi-student selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkPreviewLoading, setBulkPreviewLoading] = useState(false);
+  const [bulkPreview, setBulkPreview] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     api.get('/students/courses').then(res => {
@@ -31,7 +43,7 @@ export default function StudentsPage() {
 
   useEffect(() => {
     fetchStudents();
-  }, [pagination.page, filters.level, filters.course, filters.batch, filters.status]);
+  }, [pagination.page, filters.level, filters.course, filters.batch, filters.status, filters.search]);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -67,6 +79,67 @@ export default function StudentsPage() {
 
   const startIdx = pagination.total === 0 ? 0 : (pagination.page - 1) * 15 + 1;
   const endIdx = Math.min(pagination.page * 15, pagination.total);
+
+  // Checkbox helpers
+  const currentPageIds = students.map(s => s.studentId);
+  const allCurrentPageSelected = currentPageIds.length > 0 && currentPageIds.every(id => selectedIds.includes(id));
+  const someCurrentPageSelected = currentPageIds.some(id => selectedIds.includes(id)) && !allCurrentPageSelected;
+
+  const toggleSelectAllPage = () => {
+    if (allCurrentPageSelected) {
+      setSelectedIds(prev => prev.filter(id => !currentPageIds.includes(id)));
+    } else {
+      setSelectedIds(prev => Array.from(new Set([...prev, ...currentPageIds])));
+    }
+  };
+
+  const toggleSelectOne = (id, e) => {
+    e.stopPropagation();
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const clearSelection = () => {
+    setSelectedIds([]);
+  };
+
+  // Bulk delete preview trigger
+  const handleOpenBulkModal = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkModalOpen(true);
+    setBulkPreviewLoading(true);
+    setBulkPreview(null);
+    setDeleteReason('');
+    try {
+      const res = await api.post('/students/bulk-delete/preview', { studentIds: selectedIds });
+      setBulkPreview(res.data.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to analyze selected students');
+      setBulkModalOpen(false);
+    } finally {
+      setBulkPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkDeleting(true);
+    try {
+      const res = await api.post('/students/bulk-delete', {
+        studentIds: selectedIds,
+        reason: deleteReason || 'Admin bulk removal'
+      });
+      toast.success(res.data.message || 'Bulk operation completed successfully');
+      setBulkModalOpen(false);
+      clearSelection();
+      fetchStudents();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Bulk deletion failed');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   return (
     <div>
@@ -111,57 +184,44 @@ export default function StudentsPage() {
               </button>
 
               {isAdmin && (
-                <>
-                  <button
-                    onClick={() => navigate('/students/import')}
-                    className="flex items-center gap-2 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 rounded-xl text-xs font-semibold transition-all shadow-2xs hover:shadow-xs cursor-pointer"
-                  >
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Import Excel</span>
-                  </button>
-                  <button
-                    onClick={() => navigate('/students/new')}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm hover:shadow cursor-pointer"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>Add Student</span>
-                  </button>
-                </>
+                <button
+                  onClick={() => navigate('/students/import')}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 rounded-xl text-xs font-semibold transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Import Excel</span>
+                </button>
+              )}
+
+              {(isAdmin || isAccountant) && (
+                <button
+                  onClick={() => navigate('/students/new')}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-all shadow-sm hover:shadow cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Add Student</span>
+                </button>
               )}
             </div>
           </div>
 
-          {/* Search Input */}
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search by student name, roll number, admission ID, phone or email..."
-                value={filters.search}
-                onChange={e => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl text-xs bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400"
-              />
-              {filters.search && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFilters(prev => ({ ...prev, search: '' }));
-                    setPagination(prev => ({ ...prev, page: 1 }));
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition-colors shrink-0"
-            >
-              Search
-            </button>
-          </form>
+          {/* Search Input with Live Suggestions */}
+          <StudentSearchInput
+            value={filters.search}
+            onChange={val => setFilters(prev => ({ ...prev, search: val }))}
+            onSelectStudent={student => navigate(`/students/${student.studentId}`)}
+            onSearchSubmit={query => {
+              setFilters(prev => ({ ...prev, search: query }));
+              setPagination(prev => ({ ...prev, page: 1 }));
+            }}
+            onClear={() => {
+              setFilters(prev => ({ ...prev, search: '' }));
+              setPagination(prev => ({ ...prev, page: 1 }));
+            }}
+            placeholder="Search by student name, roll number, admission ID, phone or email..."
+            size="md"
+            showSearchButton={true}
+          />
 
           {/* Collapsible Filter Panel */}
           <AnimatePresence>
@@ -213,6 +273,7 @@ export default function StudentsPage() {
                   <option value="Graduated">Graduated</option>
                   <option value="Discontinued">Discontinued</option>
                   <option value="Transferred">Transferred</option>
+                  <option value="Archived">Archived</option>
                 </select>
 
                 {activeFiltersCount > 0 && (
@@ -228,12 +289,64 @@ export default function StudentsPage() {
           </AnimatePresence>
         </div>
 
+        {/* Multi-Selection Action Toolbar (Admin Only) */}
+        {isAdmin && selectedIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-3.5 px-5 flex flex-wrap items-center justify-between gap-3 shadow-xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
+                {selectedIds.length}
+              </div>
+              <span className="text-xs font-semibold text-indigo-950">
+                {selectedIds.length} {selectedIds.length === 1 ? 'student selected' : 'students selected across page(s)'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={clearSelection}
+                className="px-3 py-1.5 rounded-xl border border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-100/50 text-xs font-semibold transition-colors"
+              >
+                Clear Selection
+              </button>
+              <button
+                onClick={handleOpenBulkModal}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Selected ({selectedIds.length})</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+
         {/* Students Table Card */}
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  {isAdmin && (
+                    <th className="py-3 px-3 w-10 text-center">
+                      <button
+                        type="button"
+                        onClick={toggleSelectAllPage}
+                        className="text-slate-400 hover:text-blue-600 transition-colors focus:outline-none"
+                        title={allCurrentPageSelected ? 'Deselect all on this page' : 'Select all on this page'}
+                      >
+                        {allCurrentPageSelected ? (
+                          <CheckSquare className="w-4 h-4 text-blue-600" />
+                        ) : someCurrentPageSelected ? (
+                          <MinusSquare className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-400" />
+                        )}
+                      </button>
+                    </th>
+                  )}
                   <th className="py-3 px-4">Student ID</th>
                   <th className="py-3 px-4">Student Name</th>
                   <th className="py-3 px-4">Course & Batch</th>
@@ -250,6 +363,7 @@ export default function StudentsPage() {
                 {loading ? (
                   [1, 2, 3, 4, 5, 6].map(i => (
                     <tr key={i} className="animate-pulse">
+                      {isAdmin && <td className="py-3.5 px-3"><div className="w-4 h-4 skeleton rounded mx-auto" /></td>}
                       <td className="py-3.5 px-4"><div className="w-20 h-4 skeleton rounded" /></td>
                       <td className="py-3.5 px-4"><div className="w-32 h-4 skeleton rounded mb-1" /><div className="w-20 h-3 skeleton rounded" /></td>
                       <td className="py-3.5 px-4"><div className="w-28 h-4 skeleton rounded" /></td>
@@ -264,7 +378,7 @@ export default function StudentsPage() {
                   ))
                 ) : students.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="py-16 text-center">
+                    <td colSpan={isAdmin ? 11 : 10} className="py-16 text-center">
                       <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto mb-3">
                         <UsersIcon className="w-6 h-6 text-slate-400 stroke-[1.5]" />
                       </div>
@@ -283,89 +397,111 @@ export default function StudentsPage() {
                     </td>
                   </tr>
                 ) : (
-                  students.map((s, i) => (
-                    <motion.tr
-                      key={s.studentId}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: i * 0.02 }}
-                      className="hover:bg-blue-50/30 cursor-pointer transition-colors group"
-                      onClick={() => navigate(`/students/${s.studentId}`)}
-                    >
-                      <td className="py-3 px-4 text-xs font-mono font-semibold text-slate-600 group-hover:text-blue-600">
-                        {s.studentId}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs uppercase shrink-0 border border-slate-200">
-                            {s.name.charAt(0)}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
-                                {s.name}
-                              </p>
-                              {s.status === 'Inactive' && (
-                                <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                  Inactive
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-slate-400 font-mono">{s.admissionNo}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <p className="text-xs font-medium text-slate-800">{s.course}</p>
-                        {s.batch && (
-                          <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-mono font-semibold bg-slate-100 text-slate-600 border border-slate-200/60 mt-0.5">
-                            Batch {s.batch}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${s.level === 'PG' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
-                          {s.level}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-xs font-medium text-slate-600">{s.currentYear}</td>
-                      <td className="py-3 px-4 text-right text-xs font-medium text-slate-700 font-mono">
-                        {formatCurrency(s.totalFee)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-xs font-bold text-emerald-700 font-mono">
-                        {formatCurrency(s.totalPaid)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-xs font-bold font-mono">
-                        <span className={s.totalPending > 0 ? 'text-rose-600' : 'text-slate-400'}>
-                          {formatCurrency(s.totalPending)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${getStatusColor(s.feeStatus)}`}>
-                          {s.feeStatus}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
-                          {isAdmin && (
+                  students.map((s, i) => {
+                    const isSelected = selectedIds.includes(s.studentId);
+                    return (
+                      <motion.tr
+                        key={s.studentId}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.02 }}
+                        className={`cursor-pointer transition-colors group ${
+                          isSelected ? 'bg-indigo-50/40 hover:bg-indigo-50/60' : 'hover:bg-blue-50/30'
+                        }`}
+                        onClick={() => navigate(`/students/${s.studentId}`)}
+                      >
+                        {isAdmin && (
+                          <td className="py-3 px-3 text-center" onClick={e => e.stopPropagation()}>
                             <button
-                              onClick={() => navigate(`/students/${s.studentId}/edit`)}
-                              className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                              title="Edit Student Profile"
+                              type="button"
+                              onClick={e => toggleSelectOne(s.studentId, e)}
+                              className="text-slate-400 hover:text-blue-600 transition-colors focus:outline-none"
                             >
-                              <Edit className="w-3.5 h-3.5" />
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-blue-600" />
+                              ) : (
+                                <Square className="w-4 h-4 text-slate-300 group-hover:text-slate-400" />
+                              )}
                             </button>
+                          </td>
+                        )}
+                        <td className="py-3 px-4 text-xs font-mono font-semibold text-slate-600 group-hover:text-blue-600">
+                          {s.studentId}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <StudentAvatar student={s} size="sm" />
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
+                                  {s.name}
+                                </p>
+                                {s.status === 'Archived' ? (
+                                  <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                    Archived
+                                  </span>
+                                ) : s.status === 'Inactive' && (
+                                  <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                    Inactive
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-400 font-mono">{s.admissionNo}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <p className="text-xs font-medium text-slate-800">{s.course}</p>
+                          {s.batch && (
+                            <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-mono font-semibold bg-slate-100 text-slate-600 border border-slate-200/60 mt-0.5">
+                              Batch {s.batch}
+                            </span>
                           )}
-                          <button
-                            onClick={() => navigate(`/students/${s.studentId}`)}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                          >
-                            View <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-                          </button>
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${s.level === 'PG' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                            {s.level}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-xs font-medium text-slate-600">{s.currentYear}</td>
+                        <td className="py-3 px-4 text-right text-xs font-medium text-slate-700 font-mono">
+                          {formatCurrency(s.totalFee)}
+                        </td>
+                        <td className="py-3 px-4 text-right text-xs font-bold text-emerald-700 font-mono">
+                          {formatCurrency(s.totalPaid)}
+                        </td>
+                        <td className="py-3 px-4 text-right text-xs font-bold font-mono">
+                          <span className={s.totalPending > 0 ? 'text-rose-600' : 'text-slate-400'}>
+                            {formatCurrency(s.totalPending)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${getStatusColor(s.feeStatus)}`}>
+                            {s.feeStatus}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+                            {(isAdmin || isAccountant) && (
+                              <button
+                                onClick={() => navigate(`/students/${s.studentId}/edit`)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                title="Edit Student Profile"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => navigate(`/students/${s.studentId}`)}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                            >
+                              View <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -404,6 +540,134 @@ export default function StudentsPage() {
         </div>
 
       </motion.div>
+
+      {/* Bulk Delete / Safe Archival Confirmation Modal */}
+      <AnimatePresence>
+        {bulkModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden"
+            >
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Bulk Student Removal</h3>
+                    <p className="text-xs text-slate-500">
+                      {selectedIds.length} {selectedIds.length === 1 ? 'student selected' : 'students selected'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setBulkModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 max-h-[65vh] overflow-y-auto">
+                {bulkPreviewLoading ? (
+                  <div className="py-12 text-center text-slate-500 space-y-2">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" />
+                    <p className="text-xs">Inspecting financial history of selected records...</p>
+                  </div>
+                ) : bulkPreview ? (
+                  <>
+                    {/* Financial Safety Notice */}
+                    {bulkPreview.counts.archival > 0 && (
+                      <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                        <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="text-xs text-amber-800 space-y-1">
+                          <p className="font-bold">
+                            Financial Protection: {bulkPreview.counts.archival} {bulkPreview.counts.archival === 1 ? 'student has' : 'students have'} recorded transactions or demands.
+                          </p>
+                          <p className="text-amber-700">
+                            To protect financial integrity, these records will be <span className="font-semibold underline">Safely Archived</span>. All payment transactions, receipts, fee demands, and ledger history will be strictly preserved.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {bulkPreview.counts.permanent > 0 && (
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600">
+                        <span className="font-semibold text-slate-800">{bulkPreview.counts.permanent}</span> student(s) with zero payment history will be permanently deleted.
+                      </div>
+                    )}
+
+                    {/* Breakdown List */}
+                    <div className="space-y-3">
+                      <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Affected Students ({bulkPreview.preview.length})
+                      </div>
+                      <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                        {bulkPreview.preview.map(item => (
+                          <div key={item.studentId} className="p-2.5 px-3 flex items-center justify-between text-xs hover:bg-slate-50">
+                            <div>
+                              <span className="font-semibold text-slate-800">{item.name}</span>
+                              <span className="font-mono text-slate-400 ml-2">({item.admissionNo})</span>
+                            </div>
+                            <div>
+                              {item.action === 'archive' ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
+                                  Safe Archival ({item.hasPayments ? 'Has Payments' : 'Has Demands'})
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                  Permanent Deletion
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Reason input */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700">
+                        Reason for Removal / Archival <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Graduated batch cleanup, Duplicate record, Admin audit"
+                        value={deleteReason}
+                        onChange={e => setDeleteReason(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={bulkDeleting}
+                  onClick={() => setBulkModalOpen(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={bulkDeleting || bulkPreviewLoading}
+                  onClick={handleConfirmBulkDelete}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  {bulkDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Confirm Removal & Archival</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

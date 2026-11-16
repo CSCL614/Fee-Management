@@ -4,21 +4,30 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Topbar from '../components/common/Topbar';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext';
 import { pageVariants, modalVariants, backdropVariants } from '../utils/animations';
 import { formatCurrency, getStatusColor } from '../utils/helpers';
 import {
   ArrowLeft, Save, User, BookOpen, AlertCircle, Calendar,
   ShieldCheck, AlertTriangle, Trash2, Power, RotateCcw,
-  Search, X, Check, CheckCircle2, Phone, Mail, GraduationCap
+  Search, X, Check, CheckCircle2, Phone, Mail, GraduationCap,
+  Camera, Upload
 } from 'lucide-react';
+import StudentAvatar from '../components/common/StudentAvatar';
 
 export default function EditStudentPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [studentData, setStudentData] = useState(null);
+
+  // Profile Photo State
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Form State
   const [form, setForm] = useState({
@@ -96,6 +105,9 @@ export default function EditStudentPage() {
       setStudentData({ student: stu, feeSummary, feeLedger });
 
       if (stu) {
+        if (stu.profilePhoto) {
+          setPhotoPreview(stu.profilePhoto);
+        }
         setForm({
           admissionNo: stu.admissionNo || '',
           name: stu.name || '',
@@ -244,6 +256,60 @@ export default function EditStudentPage() {
     }
   };
 
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      toast.error('Invalid image format. Allowed formats: JPEG, PNG, and WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    setPhotoLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      const res = await api.post(`/students/${id}/photo`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (res.data?.data?.profilePhoto) {
+        setPhotoPreview(res.data.data.profilePhoto);
+        setStudentData(prev => ({
+          ...prev,
+          student: { ...prev?.student, profilePhoto: res.data.data.profilePhoto }
+        }));
+        toast.success('Profile photo updated successfully');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to upload photo');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    setPhotoLoading(true);
+    try {
+      await api.delete(`/students/${id}/photo`);
+      setPhotoPreview(null);
+      setStudentData(prev => ({
+        ...prev,
+        student: { ...prev?.student, profilePhoto: null }
+      }));
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      toast.success('Profile photo removed');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to remove photo');
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
   // Status Change Handler (Deactivate / Activate / etc.)
   const handleStatusChange = async (e) => {
     e.preventDefault();
@@ -338,51 +404,57 @@ export default function EditStudentPage() {
             <ArrowLeft className="w-3.5 h-3.5" /> Back to Student Profile
           </button>
 
-          <div className="flex items-center gap-2">
-            {form.status === 'Active' ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setTargetStatus('Inactive');
-                  setShowStatusModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
-              >
-                <Power className="w-3.5 h-3.5 text-amber-700" /> Deactivate Student
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setTargetStatus('Active');
-                  setShowStatusModal(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-emerald-700" /> Reactivate Student
-              </button>
-            )}
+          {/* Header Action Buttons (Admin Only) */}
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              {form.status === 'Active' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetStatus('Inactive');
+                    setShowStatusModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Power className="w-3.5 h-3.5 text-amber-700" /> Deactivate Student
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetStatus('Active');
+                    setShowStatusModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-emerald-700" /> Reactivate Student
+                </button>
+              )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setPaymentWarning(null);
-                setShowDeleteModal(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-600" /> Delete Student
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentWarning(null);
+                  setShowDeleteModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" /> Delete Student
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Student Snapshot Info Card */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200/70 text-blue-700 flex items-center justify-center font-bold text-lg uppercase shrink-0">
-                {student.name.charAt(0)}
-              </div>
+              <StudentAvatar
+                src={photoPreview || student.profilePhoto}
+                name={student.name}
+                size="lg"
+                className="w-12 h-12 rounded-2xl"
+              />
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-bold text-slate-900">{student.name}</h2>
@@ -439,6 +511,65 @@ export default function EditStudentPage() {
         {/* Edit Form Card */}
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] p-6 sm:p-8 space-y-8">
           
+          {/* Profile Photo Upload / Replace / Remove Section (Requirement 2) */}
+          <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row items-center sm:items-start gap-5">
+            <div className="relative group shrink-0">
+              <StudentAvatar
+                src={photoPreview}
+                name={form.name || student.name}
+                size="xl"
+                className="w-20 h-20 rounded-2xl border-2 border-blue-500 shadow-md"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handlePhotoChange}
+                className="hidden"
+              />
+            </div>
+
+            <div className="flex-1 text-center sm:text-left space-y-1.5">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Student Profile Photo
+                </h4>
+                {photoPreview && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                    Photo Active
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                Official student photo in JPEG, PNG, or WebP format (max 5MB). Photo changes update immediately to student records.
+              </p>
+
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={photoLoading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{photoLoading ? 'Uploading...' : photoPreview ? 'Replace Photo' : 'Upload Photo'}</span>
+                </button>
+
+                {photoPreview && (
+                  <button
+                    type="button"
+                    disabled={photoLoading}
+                    onClick={handleRemovePhoto}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Photo</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* 1. Academic & Course Details */}
           <div>
             <div className="flex items-center gap-2 pb-3 mb-4 border-b border-slate-100">

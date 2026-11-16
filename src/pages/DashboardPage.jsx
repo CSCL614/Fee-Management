@@ -33,8 +33,13 @@ export default function DashboardPage() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
 
-  // Yearly Fee Inflow State (Requirement 2)
+  // Yearly Fee Inflow State (Requirement 1: Year, Month, Course filters)
   const [selectedInflowYear, setSelectedInflowYear] = useState(new Date().getFullYear());
+  const [selectedInflowMonth, setSelectedInflowMonth] = useState('');
+  const [selectedInflowCourse, setSelectedInflowCourse] = useState('');
+  const [inflowMode, setInflowMode] = useState('monthly');
+  const [inflowMonthName, setInflowMonthName] = useState('');
+  const [availableCourses, setAvailableCourses] = useState([]);
   const [yearlyInflow, setYearlyInflow] = useState([]);
   const [availableYears, setAvailableYears] = useState([2026, 2025, 2024]);
   const [inflowLoading, setInflowLoading] = useState(false);
@@ -46,6 +51,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchDashboard();
+    api.get('/students/courses')
+      .then(res => setAvailableCourses(res.data.data?.courses || []))
+      .catch(() => {});
   }, []);
 
   const fetchDashboard = async () => {
@@ -69,23 +77,45 @@ export default function DashboardPage() {
     }
   };
 
-  const handleInflowYearChange = async (year) => {
-    const yr = parseInt(year);
-    setSelectedInflowYear(yr);
+  const fetchInflow = async (year, month, course) => {
+    const yr = year !== undefined ? year : selectedInflowYear;
+    const mo = month !== undefined ? month : selectedInflowMonth;
+    const cr = course !== undefined ? course : selectedInflowCourse;
     setInflowLoading(true);
     try {
-      const res = await api.get(`/reports/yearly-inflow?year=${yr}`);
-      if (res.data.success && res.data.data?.monthlyData) {
-        setYearlyInflow(res.data.data.monthlyData);
+      let url = `/reports/yearly-inflow?year=${yr}`;
+      if (mo && mo !== 'all') url += `&month=${mo}`;
+      if (cr && cr !== 'all') url += `&course=${encodeURIComponent(cr)}`;
+      const res = await api.get(url);
+      if (res.data.success && res.data.data) {
+        setYearlyInflow(res.data.data.chartData || res.data.data.monthlyData || []);
+        setInflowMode(res.data.data.mode || (mo && mo !== 'all' ? 'daily' : 'monthly'));
+        setInflowMonthName(res.data.data.monthName || '');
         if (res.data.data.availableYears) {
           setAvailableYears(res.data.data.availableYears);
         }
       }
     } catch (err) {
-      console.error('Failed to load yearly inflow for year', yr, err);
+      console.error('Failed to load inflow data:', err);
     } finally {
       setInflowLoading(false);
     }
+  };
+
+  const handleInflowYearChange = (year) => {
+    const yr = parseInt(year);
+    setSelectedInflowYear(yr);
+    fetchInflow(yr, selectedInflowMonth, selectedInflowCourse);
+  };
+
+  const handleInflowMonthChange = (month) => {
+    setSelectedInflowMonth(month);
+    fetchInflow(selectedInflowYear, month, selectedInflowCourse);
+  };
+
+  const handleInflowCourseChange = (course) => {
+    setSelectedInflowCourse(course);
+    fetchInflow(selectedInflowYear, selectedInflowMonth, course);
   };
 
   const handleAccountantSearch = async (val) => {
@@ -290,29 +320,77 @@ export default function DashboardPage() {
                 animate="show"
                 className="lg:col-span-2 bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)]"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 pb-3 border-b border-slate-100 gap-2">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-4 pb-3 border-b border-slate-100 gap-3">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Yearly Fee Inflow</h3>
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      {inflowMode === 'daily'
+                        ? `Daily Fee Inflow — ${inflowMonthName || 'Month'} ${selectedInflowYear}`
+                        : `Yearly Fee Inflow — ${selectedInflowYear}`}
+                    </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Monthly aggregated collections across calendar year {selectedInflowYear}
+                      {inflowMode === 'daily'
+                        ? `Day-by-day verified collections for ${inflowMonthName || 'selected month'} ${selectedInflowYear}${selectedInflowCourse ? ` · ${selectedInflowCourse}` : ''}`
+                        : `Monthly aggregated collections across calendar year ${selectedInflowYear}${selectedInflowCourse ? ` · ${selectedInflowCourse}` : ''}`}
                     </p>
                   </div>
                   
-                  {/* Dynamic Year Selector */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      Calendar Year:
-                    </span>
-                    <select
-                      value={selectedInflowYear}
-                      onChange={e => handleInflowYearChange(e.target.value)}
-                      disabled={inflowLoading}
-                      className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50/80 hover:bg-white focus:bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors shadow-2xs"
-                    >
-                      {availableYears.map(yr => (
-                        <option key={yr} value={yr}>Calendar Year {yr}</option>
-                      ))}
-                    </select>
+                  {/* Dynamic Year, Month, Course Filters */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Course Filter */}
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={selectedInflowCourse}
+                        onChange={e => handleInflowCourseChange(e.target.value)}
+                        disabled={inflowLoading}
+                        className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50/80 hover:bg-white focus:bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors shadow-2xs max-w-40 truncate"
+                        title="Filter by Course / Branch"
+                      >
+                        <option value="">All Courses</option>
+                        {availableCourses.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Month Filter */}
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={selectedInflowMonth}
+                        onChange={e => handleInflowMonthChange(e.target.value)}
+                        disabled={inflowLoading}
+                        className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50/80 hover:bg-white focus:bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors shadow-2xs"
+                        title="Filter by Month"
+                      >
+                        <option value="">All Months (Jan–Dec)</option>
+                        <option value="1">01 - January</option>
+                        <option value="2">02 - February</option>
+                        <option value="3">03 - March</option>
+                        <option value="4">04 - April</option>
+                        <option value="5">05 - May</option>
+                        <option value="6">06 - June</option>
+                        <option value="7">07 - July</option>
+                        <option value="8">08 - August</option>
+                        <option value="9">09 - September</option>
+                        <option value="10">10 - October</option>
+                        <option value="11">11 - November</option>
+                        <option value="12">12 - December</option>
+                      </select>
+                    </div>
+
+                    {/* Calendar Year Selector */}
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={selectedInflowYear}
+                        onChange={e => handleInflowYearChange(e.target.value)}
+                        disabled={inflowLoading}
+                        className="px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50/80 hover:bg-white focus:bg-white text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors shadow-2xs font-mono"
+                        title="Select Calendar Year"
+                      >
+                        {availableYears.map(yr => (
+                          <option key={yr} value={yr}>Year {yr}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -321,7 +399,7 @@ export default function DashboardPage() {
                     <BarChart
                       data={yearlyInflow}
                       margin={{ top: 25, right: 15, left: -10, bottom: 0 }}
-                      barCategoryGap="12%"
+                      barCategoryGap={inflowMode === 'daily' ? "4%" : "12%"}
                     >
                       <defs>
                         <linearGradient id="dashboardMonthlyGrad" x1="0" y1="0" x2="0" y2="1">
@@ -331,8 +409,9 @@ export default function DashboardPage() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis
-                        dataKey="month"
-                        tick={{ fontSize: 12, fill: '#475569', fontWeight: 600 }}
+                        dataKey={inflowMode === 'daily' ? 'day' : 'month'}
+                        tick={{ fontSize: inflowMode === 'daily' ? 10 : 12, fill: '#475569', fontWeight: 600 }}
+                        interval={inflowMode === 'daily' ? (yearlyInflow.length > 25 ? 1 : 0) : 0}
                         axisLine={{ stroke: '#e2e8f0' }}
                         tickLine={false}
                       />
@@ -350,8 +429,8 @@ export default function DashboardPage() {
                             return (
                               <div className="bg-white/95 backdrop-blur-md p-3 rounded-xl border border-slate-200/90 shadow-xl text-xs z-50 min-w-44">
                                 <p className="font-bold text-slate-900 pb-1 mb-1.5 border-b border-slate-100 flex items-center justify-between">
-                                  <span>{d.fullMonth || `${d.month} ${selectedInflowYear}`}</span>
-                                  <span className="text-[10px] font-semibold text-slate-500">{d.monthName}</span>
+                                  <span>{d.fullDate || d.fullMonth || `${d.month} ${selectedInflowYear}`}</span>
+                                  <span className="text-[10px] font-semibold text-slate-500">{d.monthName || ''}</span>
                                 </p>
                                 <div className="space-y-1">
                                   <div className="flex justify-between items-center text-slate-600">
@@ -372,9 +451,9 @@ export default function DashboardPage() {
                       <Bar
                         dataKey="amount"
                         fill="url(#dashboardMonthlyGrad)"
-                        radius={[8, 8, 0, 0]}
-                        barSize={38}
-                        maxBarSize={48}
+                        radius={[6, 6, 0, 0]}
+                        barSize={inflowMode === 'daily' ? (yearlyInflow.length > 25 ? 12 : 18) : 38}
+                        maxBarSize={inflowMode === 'daily' ? 22 : 48}
                         isAnimationActive={true}
                         animationDuration={850}
                         animationEasing="ease-out"
@@ -382,11 +461,11 @@ export default function DashboardPage() {
                         <LabelList
                           dataKey="amount"
                           position="top"
-                          formatter={v => (v > 0 ? `₹${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : '')}
+                          formatter={v => (v > 0 ? (inflowMode === 'daily' ? `₹${(v / 1000).toFixed(0)}k` : `₹${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k`) : '')}
                           fill="#334155"
-                          fontSize={10.5}
+                          fontSize={inflowMode === 'daily' ? 8.5 : 10.5}
                           fontWeight={700}
-                          offset={8}
+                          offset={6}
                         />
                       </Bar>
                     </BarChart>
@@ -394,7 +473,7 @@ export default function DashboardPage() {
                 ) : (
                   <div className="h-64 flex flex-col items-center justify-center text-slate-400 text-sm">
                     <TrendingUp className="w-10 h-10 text-slate-300 mb-2 stroke-[1.5]" />
-                    No collection records logged for calendar year {selectedInflowYear}
+                    No collection records logged for {inflowMode === 'daily' ? `${inflowMonthName} ` : ''}calendar year {selectedInflowYear}
                   </div>
                 )}
               </motion.div>

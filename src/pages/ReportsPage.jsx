@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 import Topbar from '../components/common/Topbar';
 import api from '../services/api';
+import toast from 'react-hot-toast';
 import { formatCurrency } from '../utils/helpers';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
-import { FileSpreadsheet, TrendingUp, Filter, Calendar, BookOpen, Layers, Clock, AlertTriangle, ArrowUpRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import {
+  FileSpreadsheet, TrendingUp, Filter, Calendar, BookOpen, Layers,
+  Clock, AlertTriangle, ArrowUpRight, X, Download, RefreshCw, Loader2, CheckCircle2
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { pageVariants, staggerContainer, staggerItem, AnimatedNumber } from '../utils/animations';
 
 const PIE_COLORS = ['#1e3a8a', '#2563eb', '#38bdf8', '#818cf8', '#c084fc', '#10b981', '#f59e0b', '#ef4444'];
@@ -17,6 +21,20 @@ export default function ReportsPage() {
   const [academicYears, setAcademicYears] = useState([]);
   const [courses, setCourses] = useState([]);
   const [batches, setBatches] = useState([]);
+
+  // Master Workbook Export Modal State
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportFilters, setExportFilters] = useState({
+    academicYear: '',
+    calendarYear: '',
+    course: '',
+    studyYear: '',
+    status: '',
+    search: ''
+  });
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewCount, setPreviewCount] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -47,13 +65,80 @@ export default function ReportsPage() {
     }
   };
 
-  const exportExcel = async () => {
-    const res = await api.get('/exports/excel', { responseType: 'blob' });
-    const url = window.URL.createObjectURL(new Blob([res.data]));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Fee_Collection_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
-    a.click();
+  // Open Export Modal and fetch initial count
+  const handleOpenExportModal = () => {
+    setExportModalOpen(true);
+    fetchExportCount(exportFilters);
+  };
+
+  const fetchExportCount = async (filtersToUse) => {
+    setPreviewLoading(true);
+    try {
+      const res = await api.get('/exports/master-workbook/count', { params: filtersToUse });
+      setPreviewCount(res.data.data);
+    } catch {
+      setPreviewCount(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleExportFilterChange = (key, val) => {
+    const updated = { ...exportFilters, [key]: val };
+    setExportFilters(updated);
+    fetchExportCount(updated);
+  };
+
+  const clearExportFilters = () => {
+    const reset = {
+      academicYear: '',
+      calendarYear: '',
+      course: '',
+      studyYear: '',
+      status: '',
+      search: ''
+    };
+    setExportFilters(reset);
+    fetchExportCount(reset);
+  };
+
+  const handleDownloadMasterWorkbook = async () => {
+    if (previewCount?.matchingStudents === 0) {
+      toast.error('No matching student records found for the selected filters.');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const res = await api.get('/exports/master-workbook', {
+        params: exportFilters,
+        responseType: 'blob'
+      });
+
+      // Check if blob is actually an error JSON
+      if (res.data.type === 'application/json') {
+        const text = await res.data.text();
+        const errObj = JSON.parse(text);
+        throw new Error(errObj.message || 'Export generation failed');
+      }
+
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      a.download = `Fee_Master_Workbook_${dateStr}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Fee Master Workbook downloaded successfully!');
+      setExportModalOpen(false);
+    } catch (err) {
+      toast.error(err.message || 'Failed to download master workbook');
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) {
@@ -136,8 +221,8 @@ export default function ReportsPage() {
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
-              onClick={exportExcel}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs shrink-0"
+              onClick={handleOpenExportModal}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-all shadow-xs shrink-0 cursor-pointer"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
               <span>Export Master Workbook</span>
@@ -155,7 +240,7 @@ export default function ReportsPage() {
               className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none focus:border-blue-500 font-medium"
             >
               <option value="">All Academic Years</option>
-              {academicYears.map(y => <option key={y.year} value={y.year}>{y.year}</option>)}
+              {academicYears.map(y => <option key={y._id || y.year} value={y.year}>{y.year}</option>)}
             </select>
 
             <select
@@ -180,7 +265,7 @@ export default function ReportsPage() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
               onClick={fetchReports}
-              className="px-4 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors ml-auto"
+              className="px-4 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors ml-auto cursor-pointer"
             >
               Apply Filter
             </motion.button>
@@ -384,6 +469,263 @@ export default function ReportsPage() {
         </div>
 
       </motion.div>
+
+      {/* Export Master Workbook Filter & Download Modal */}
+      <AnimatePresence>
+        {exportModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden"
+            >
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Export Fee Master Workbook</h3>
+                    <p className="text-xs text-slate-500">Includes 5 worksheets: Student_Master, Fee_Details, Payment_History, Academic_Years, Export_Summary</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setExportModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                
+                {/* Filter Controls Grid */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Filter className="w-3.5 h-3.5 text-blue-600" />
+                      Workbook Filter Criteria
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearExportFilters}
+                      className="text-xs text-rose-600 hover:text-rose-700 font-medium hover:underline"
+                    >
+                      Clear Filters
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {/* Academic Year */}
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                        Academic Year
+                      </label>
+                      <select
+                        value={exportFilters.academicYear}
+                        onChange={e => handleExportFilterChange('academicYear', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 focus:outline-none focus:border-blue-500 font-medium"
+                      >
+                        <option value="">All Academic Years</option>
+                        {academicYears.map(y => (
+                          <option key={y._id || y.year} value={y.year}>{y.year}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Calendar Year */}
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                        Calendar Year
+                      </label>
+                      <select
+                        value={exportFilters.calendarYear}
+                        onChange={e => handleExportFilterChange('calendarYear', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 focus:outline-none focus:border-blue-500 font-medium font-mono"
+                      >
+                        <option value="">All Calendar Years</option>
+                        <option value="2027">2027</option>
+                        <option value="2026">2026</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                      </select>
+                    </div>
+
+                    {/* Course / Branch */}
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                        Course / Branch
+                      </label>
+                      <select
+                        value={exportFilters.course}
+                        onChange={e => handleExportFilterChange('course', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 focus:outline-none focus:border-blue-500 font-medium truncate"
+                      >
+                        <option value="">All Courses</option>
+                        {courses.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Study Year */}
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                        Study Year
+                      </label>
+                      <select
+                        value={exportFilters.studyYear}
+                        onChange={e => handleExportFilterChange('studyYear', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 focus:outline-none focus:border-blue-500 font-medium"
+                      >
+                        <option value="">All Study Years</option>
+                        <option value="1st Year">1st Year</option>
+                        <option value="2nd Year">2nd Year</option>
+                        <option value="3rd Year">3rd Year</option>
+                        <option value="4th Year">4th Year</option>
+                      </select>
+                    </div>
+
+                    {/* Student Status */}
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                        Student Status
+                      </label>
+                      <select
+                        value={exportFilters.status}
+                        onChange={e => handleExportFilterChange('status', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 focus:outline-none focus:border-blue-500 font-medium"
+                      >
+                        <option value="">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="Graduated">Graduated</option>
+                        <option value="Discontinued">Discontinued</option>
+                        <option value="Transferred">Transferred</option>
+                        <option value="Archived">Archived</option>
+                      </select>
+                    </div>
+
+                    {/* Search student */}
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase mb-1">
+                        Search Student
+                      </label>
+                      <input
+                        type="text"
+                        value={exportFilters.search}
+                        onChange={e => handleExportFilterChange('search', e.target.value)}
+                        placeholder="Name or Admission No"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Preview Record Count Summary Card */}
+                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Live Data Preview
+                    </span>
+                    <button
+                      type="button"
+                      disabled={previewLoading}
+                      onClick={() => fetchExportCount(exportFilters)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${previewLoading ? 'animate-spin' : ''}`} />
+                      Refresh Count
+                    </button>
+                  </div>
+
+                  {previewLoading ? (
+                    <div className="py-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                      Calculating filtered records from database...
+                    </div>
+                  ) : previewCount ? (
+                    <div>
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-center">
+                        <div className="p-2 bg-white rounded-lg border border-slate-200/80">
+                          <p className="text-[10px] uppercase font-bold text-slate-400">Students</p>
+                          <p className="text-base font-bold font-mono text-slate-900 mt-0.5">
+                            {previewCount.matchingStudents}
+                          </p>
+                        </div>
+                        <div className="p-2 bg-white rounded-lg border border-slate-200/80">
+                          <p className="text-[10px] uppercase font-bold text-slate-400">Demands</p>
+                          <p className="text-base font-bold font-mono text-slate-900 mt-0.5">
+                            {previewCount.matchingDemands}
+                          </p>
+                        </div>
+                        <div className="p-2 bg-white rounded-lg border border-slate-200/80">
+                          <p className="text-[10px] uppercase font-bold text-slate-400">Receipts</p>
+                          <p className="text-base font-bold font-mono text-emerald-700 mt-0.5">
+                            {previewCount.matchingPayments}
+                          </p>
+                        </div>
+                        <div className="p-2 bg-white rounded-lg border border-slate-200/80 col-span-3 sm:col-span-2">
+                          <p className="text-[10px] uppercase font-bold text-slate-400">Total Inflow Verified</p>
+                          <p className="text-base font-bold font-mono text-emerald-700 mt-0.5">
+                            {formatCurrency(previewCount.totalPaid)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {previewCount.matchingStudents === 0 && (
+                        <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-xs text-amber-800">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>No students match the selected filter criteria. Please broaden your filters.</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-2 text-center text-xs text-slate-400">
+                      Failed to calculate preview. You can still download the workbook.
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-slate-400 space-y-1">
+                  <p>• All text cells are formula-injection protected against Excel execution threats.</p>
+                  <p>• Excludes cancelled receipts to ensure mathematical audit accuracy with ledger totals.</p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setExportModalOpen(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={exporting || (previewCount && previewCount.matchingStudents === 0)}
+                  onClick={handleDownloadMasterWorkbook}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                >
+                  {exporting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Generating Excel Workbook...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download Master Workbook (.xlsx)</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

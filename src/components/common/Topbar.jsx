@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
-import { Search, Bell, X, ChevronRight } from 'lucide-react';
+import { Search, X, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -9,6 +9,8 @@ import { formatCurrency, getStatusColor } from '../../utils/helpers';
 const breadcrumbMap = {
   '/dashboard': [{ label: 'Dashboard' }],
   '/students': [{ label: 'Students' }],
+  '/students/graduated': [{ label: 'Students', to: '/students' }, { label: 'Graduated Alumni' }],
+  '/students/import': [{ label: 'Students', to: '/students' }, { label: 'Import Excel' }],
   '/students/new': [{ label: 'Students', to: '/students' }, { label: 'Add Student' }],
   '/record-payment': [{ label: 'Record Payment' }],
   '/payments': [{ label: 'Payment History' }],
@@ -34,7 +36,10 @@ export default function Topbar({ title }) {
 
   // Determine breadcrumbs from current path
   const pathKey = location.pathname;
-  const isStudentProfile = /^\/students\/[^/]+$/.test(pathKey) && pathKey !== '/students/new';
+  const isStudentProfile = /^\/students\/[^/]+$/.test(pathKey) &&
+    pathKey !== '/students/new' &&
+    pathKey !== '/students/graduated' &&
+    pathKey !== '/students/import';
   const breadcrumbs = isStudentProfile
     ? [{ label: 'Students', to: '/students' }, { label: title || 'Student Profile' }]
     : breadcrumbMap[pathKey] || [{ label: title }];
@@ -52,9 +57,10 @@ export default function Topbar({ title }) {
 
   useEffect(() => {
     const timer = setTimeout(async () => {
-      if (searchQuery.length >= 2) {
+      const trimmed = searchQuery.trim();
+      if (trimmed.length >= 1) {
         try {
-          const res = await api.get(`/students/search?q=${searchQuery}`);
+          const res = await api.get(`/students/search?q=${encodeURIComponent(trimmed)}`);
           setSearchResults(res.data.data || []);
           setShowResults(true);
         } catch {
@@ -64,7 +70,7 @@ export default function Topbar({ title }) {
         setSearchResults([]);
         setShowResults(false);
       }
-    }, 300);
+    }, 250);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -106,6 +112,19 @@ export default function Topbar({ title }) {
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
           onFocus={() => { setSearchFocused(true); if (searchResults.length > 0) setShowResults(true); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              if (searchResults.length > 0) {
+                navigate(`/students/${searchResults[0].studentId}`);
+                setShowResults(false);
+                setSearchFocused(false);
+              } else if (searchQuery.trim()) {
+                navigate(`/students?search=${encodeURIComponent(searchQuery.trim())}`);
+                setShowResults(false);
+                setSearchFocused(false);
+              }
+            }
+          }}
           className={`w-full pl-9 pr-9 py-2 bg-gray-50 border rounded-lg text-sm transition-all duration-200 focus:outline-none focus-ring ${
             searchFocused 
               ? 'border-blue-300 bg-white shadow-sm ring-2 ring-blue-500/10' 
@@ -150,7 +169,11 @@ export default function Topbar({ title }) {
                 >
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors truncate">{student.name}</p>
-                    <p className="text-[11px] text-slate-500 font-mono">{student.course} • {student.currentYear} • {student.admissionNo}</p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      {student.course} • {student.currentYear} • Adm: {student.admissionNo}
+                      {student.rollNo ? ` • Roll: ${student.rollNo}` : ''}
+                      {student.phone ? ` • 📞 ${student.phone}` : ''}
+                    </p>
                   </div>
                   <div className="text-right ml-3 shrink-0">
                     <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(student.feeStatus)}`}>
@@ -166,7 +189,7 @@ export default function Topbar({ title }) {
           )}
 
           {/* No results */}
-          {showResults && searchQuery.length >= 2 && searchResults.length === 0 && (
+          {showResults && searchQuery.trim().length >= 1 && searchResults.length === 0 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: -4 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -181,22 +204,14 @@ export default function Topbar({ title }) {
         </AnimatePresence>
       </div>
 
-      {/* Right: Notification & User */}
+      {/* Right: User Profile (Notification Bell removed per requirement 8) */}
       <div className="flex items-center gap-2 shrink-0">
-        <button
-          className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          aria-label="Notifications"
-        >
-          <Bell className="w-[18px] h-[18px]" />
-        </button>
-        
-        {/* User avatar (visible on larger screens) */}
-        <div className="hidden md:flex items-center gap-2 pl-2 ml-1 border-l border-gray-200">
-          <div className="w-8 h-8 bg-navy-100 rounded-lg flex items-center justify-center">
-            <span className="text-navy-700 text-xs font-bold">{user?.name?.charAt(0)?.toUpperCase()}</span>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center border border-blue-200">
+            <span className="text-blue-800 text-xs font-bold">{user?.name?.charAt(0)?.toUpperCase()}</span>
           </div>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-gray-700 truncate max-w-[100px]">{user?.name}</p>
+          <div className="hidden sm:block min-w-0">
+            <p className="text-xs font-semibold text-gray-800 truncate max-w-[120px]">{user?.name}</p>
             <p className="text-[10px] text-gray-400 capitalize font-medium">{user?.role}</p>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -16,6 +17,7 @@ import AuditLogPage from './pages/AuditLogPage';
 import ManageUsersPage from './pages/ManageUsersPage';
 import SettingsPage from './pages/SettingsPage';
 import ImportStudentsPage from './pages/ImportStudentsPage';
+import GraduatedStudentsPage from './pages/GraduatedStudentsPage';
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading, isAdmin } = useAuth();
@@ -43,11 +45,17 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="students" element={<StudentsPage />} />
-        <Route path="students/import" element={<ProtectedRoute adminOnly><ImportStudentsPage /></ProtectedRoute>} />
-        <Route path="students/new" element={<ProtectedRoute adminOnly><AddStudentPage /></ProtectedRoute>} />
-        <Route path="students/:id" element={<StudentProfilePage />} />
-        <Route path="students/:id/edit" element={<ProtectedRoute adminOnly><EditStudentPage /></ProtectedRoute>} />
+        
+        {/* Student Routes */}
+        <Route path="students">
+          <Route index element={<StudentsPage />} />
+          <Route path="graduated" element={<GraduatedStudentsPage />} />
+          <Route path="import" element={<ProtectedRoute adminOnly><ImportStudentsPage /></ProtectedRoute>} />
+          <Route path="new" element={<ProtectedRoute><AddStudentPage /></ProtectedRoute>} />
+          <Route path=":id" element={<StudentProfilePage />} />
+          <Route path=":id/edit" element={<ProtectedRoute><EditStudentPage /></ProtectedRoute>} />
+        </Route>
+
         <Route path="record-payment" element={<RecordPaymentPage />} />
         <Route path="payments" element={<PaymentsPage />} />
         <Route path="fee-structure" element={<ProtectedRoute><FeeStructurePage /></ProtectedRoute>} />
@@ -65,10 +73,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

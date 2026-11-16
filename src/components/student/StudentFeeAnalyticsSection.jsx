@@ -46,13 +46,21 @@ export default function StudentFeeAnalyticsSection({ feeSummary, studentName }) 
         paidMap.set(name, (paidMap.get(name) || 0) + paid);
         pendingMap.set(name, (pendingMap.get(name) || 0) + remaining);
       }
+
+      // If viewing a specific academic year with carried forward arrears,
+      // account for them so the Outstanding Pending card matches the year's total payable assessed
+      if (selectedYear !== 'all' && (ys.previousYearDue || 0) > 0) {
+        const carryName = 'Carried Forward Due';
+        demandMap.set(carryName, (demandMap.get(carryName) || 0) + ys.previousYearDue);
+        pendingMap.set(carryName, (pendingMap.get(carryName) || 0) + ys.previousYearDue);
+      }
     }
 
     const calcTotal = (map) => Array.from(map.values()).reduce((sum, v) => sum + v, 0);
 
-    const sumDemand = calcTotal(demandMap);
-    const sumPaid = calcTotal(paidMap);
-    const sumPending = calcTotal(pendingMap);
+    const sumDemand = selectedYear === 'all' && overall.totalFee ? overall.totalFee : calcTotal(demandMap);
+    const sumPaid = selectedYear === 'all' && overall.totalPaid !== undefined ? overall.totalPaid : calcTotal(paidMap);
+    const sumPending = selectedYear === 'all' && overall.totalPending !== undefined ? overall.totalPending : calcTotal(pendingMap);
 
     const formatSlices = (map, total) => {
       if (total <= 0) return [];

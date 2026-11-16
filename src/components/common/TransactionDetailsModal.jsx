@@ -5,12 +5,14 @@ import { formatCurrency, formatDate, getStatusColor } from '../../utils/helpers'
 import {
   X, Receipt, User, Calendar, CreditCard, CheckCircle2,
   Lock, Copy, Check, Printer, ArrowRight, ExternalLink,
-  ShieldCheck, FileText, Layers, AlertTriangle
+  ShieldCheck, FileText, Layers, AlertTriangle, Download
 } from 'lucide-react';
+import api from '../../services/api';
 import toast from 'react-hot-toast';
 
 export default function TransactionDetailsModal({ payment, onClose }) {
   const [copied, setCopied] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const navigate = useNavigate();
 
   if (!payment) return null;
@@ -21,6 +23,31 @@ export default function TransactionDetailsModal({ payment, onClose }) {
       setCopied(true);
       toast.success('Receipt voucher number copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    const pId = payment._id || payment.paymentId;
+    if (!pId) {
+      toast.error('Payment ID not available for PDF receipt');
+      return;
+    }
+    setDownloadingPdf(true);
+    try {
+      const res = await api.get(`/payments/${pId}/receipt`, { responseType: 'blob' });
+      const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `Receipt_${payment.receiptNo || 'Payment'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(blobUrl);
+      toast.success('Official PDF receipt downloaded');
+    } catch (err) {
+      toast.error('Failed to download PDF receipt');
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -272,14 +299,25 @@ export default function TransactionDetailsModal({ payment, onClose }) {
           </div>
 
           {/* Footer Actions */}
-          <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-white hover:border-slate-300 transition-colors shadow-2xs cursor-pointer"
-            >
-              <Printer className="w-4 h-4 text-slate-500" />
-              <span>Print Official Voucher</span>
-            </button>
+          <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-white hover:border-slate-300 transition-colors shadow-2xs cursor-pointer"
+              >
+                <Printer className="w-4 h-4 text-slate-500" />
+                <span>Print Voucher</span>
+              </button>
+
+              <button
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf || !payment._id && !payment.paymentId}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>{downloadingPdf ? 'Generating...' : 'PDF Receipt'}</span>
+              </button>
+            </div>
 
             <button
               onClick={onClose}

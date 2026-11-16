@@ -11,7 +11,8 @@ import CollegeLogo from './CollegeLogo';
 
 const adminMenu = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/students', icon: Users, label: 'Students' },
+  { to: '/students', icon: Users, label: 'Students', end: true },
+  { to: '/students/graduated', icon: GraduationCap, label: 'Graduated Students' },
   { to: '/students/import', icon: FileSpreadsheet, label: 'Import Excel' },
   { to: '/record-payment', icon: CreditCard, label: 'Record Payment' },
   { to: '/payments', icon: History, label: 'Payment History' },
@@ -25,7 +26,8 @@ const adminMenu = [
 
 const accountantMenu = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/students', icon: Users, label: 'Students' },
+  { to: '/students', icon: Users, label: 'Students', end: true },
+  { to: '/students/graduated', icon: GraduationCap, label: 'Graduated Students' },
   { to: '/record-payment', icon: CreditCard, label: 'Record Payment' },
   { to: '/payments', icon: History, label: 'Payment History' },
   { to: '/fee-structure', icon: BookOpen, label: 'Fee Structure' },
@@ -91,6 +93,7 @@ export default function Sidebar({ collapsed: propCollapsed, setCollapsed: propSe
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.end}
               onClick={() => setMobileOpen(false)}
               title={collapsed && !isMobile ? item.label : undefined}
               className={({ isActive }) =>

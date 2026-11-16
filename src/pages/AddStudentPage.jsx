@@ -5,7 +5,8 @@ import Topbar from '../components/common/Topbar';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { pageVariants } from '../utils/animations';
-import { ArrowLeft, UserPlus, Search, X, Check, ChevronDown, BookOpen, AlertCircle, Calendar } from 'lucide-react';
+import { ArrowLeft, UserPlus, Search, X, Check, ChevronDown, BookOpen, AlertCircle, Calendar, Camera, Upload, Trash2, User } from 'lucide-react';
+import StudentAvatar from '../components/common/StudentAvatar';
 
 export default function AddStudentPage() {
   const [form, setForm] = useState({
@@ -36,7 +37,42 @@ export default function AddStudentPage() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef(null);
+  const fileInputRef = useRef(null);
   const navigate = useNavigate();
+
+  // Profile Photo State
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      toast.error('Invalid image format. Allowed formats: JPEG, PNG, and WebP.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    setPhotoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setPhotoPreview(objectUrl);
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoFile(null);
+    if (photoPreview) {
+      URL.revokeObjectURL(photoPreview);
+    }
+    setPhotoPreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   // Load initial academic years and MongoDB courses
   useEffect(() => {
@@ -207,6 +243,23 @@ export default function AddStudentPage() {
 
     setSubmitting(true);
     try {
+      let uploadedPhotoUrl = null;
+      if (photoFile) {
+        try {
+          const photoData = new FormData();
+          photoData.append('photo', photoFile);
+          const uploadRes = await api.post('/students/upload-photo', photoData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          if (uploadRes.data?.data?.photoUrl) {
+            uploadedPhotoUrl = uploadRes.data.data.photoUrl;
+          }
+        } catch (photoErr) {
+          console.warn('Photo upload warning:', photoErr);
+          toast.error('Failed to upload photo, but proceeding with student enrollment');
+        }
+      }
+
       const payload = {
         admissionNo: form.admissionNo.trim(),
         name: form.name.trim(),
@@ -223,7 +276,8 @@ export default function AddStudentPage() {
         phone: form.phone.trim(),
         fatherName: form.fatherName.trim(),
         gender: form.gender,
-        address: form.address.trim()
+        address: form.address.trim(),
+        profilePhoto: uploadedPhotoUrl
       };
 
       const res = await api.post('/students', payload);
@@ -280,6 +334,69 @@ export default function AddStudentPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Student Profile Photo Upload Section (Requirement 2) */}
+            <div className="p-4 bg-slate-50/70 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row items-center sm:items-start gap-5">
+              <div className="relative group shrink-0">
+                {photoPreview ? (
+                  <img
+                    src={photoPreview}
+                    alt="Student Preview"
+                    className="w-20 h-20 rounded-2xl object-cover border-2 border-blue-500 shadow-md"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 shadow-2xs">
+                    <Camera className="w-7 h-7 text-slate-400 mb-1" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Photo</span>
+                  </div>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                />
+              </div>
+
+              <div className="flex-1 text-center sm:text-left space-y-1.5">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Student Profile Photo <span className="text-slate-400 font-normal lowercase">(optional)</span>
+                  </h4>
+                  {photoFile && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                      Photo Selected
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500">
+                  Upload an official student headshot in JPEG, PNG, or WebP format (max 5MB).
+                </p>
+
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-blue-600" />
+                    <span>{photoFile ? 'Change Photo' : 'Upload Photo'}</span>
+                  </button>
+
+                  {photoFile && (
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remove</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Academic & Course Information Section */}
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-navy-700 mb-3 flex items-center gap-1.5">

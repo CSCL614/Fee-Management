@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertTriangle,
   XCircle, ArrowRight, RotateCcw, ShieldCheck, Check, Info, FileText,
-  AlertCircle, Users, ExternalLink, RefreshCw, ChevronRight, HelpCircle, Sparkles
+  AlertCircle, Users, ExternalLink, RefreshCw, ChevronRight, HelpCircle, Sparkles,
+  MessageSquare, Copy, Search, Filter, Tag, Eye
 } from 'lucide-react';
 import { formatCurrency } from '../utils/helpers';
 import { pageVariants, fadeInUp } from '../utils/animations';
@@ -34,6 +35,70 @@ export default function ImportStudentsPage() {
 
   // Result data
   const [importResult, setImportResult] = useState(null);
+
+  // Requirement 2: Excel Comments & Transaction References Filter State
+  const [commentWorksheetFilter, setCommentWorksheetFilter] = useState('All');
+  const [commentStatusFilter, setCommentStatusFilter] = useState('All');
+  const [commentSearch, setCommentSearch] = useState('');
+  const [copiedCell, setCopiedCell] = useState(null);
+
+  // Copy comment text helper
+  const handleCopyComment = (text, key) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedCell(key);
+    toast.success('Comment text copied to clipboard');
+    setTimeout(() => setCopiedCell(null), 2000);
+  };
+
+  // Export extracted comments helper
+  const handleExportComments = async () => {
+    try {
+      const comments = previewData?.extractedComments || [];
+      if (comments.length === 0) {
+        toast.error('No comments available to export');
+        return;
+      }
+      toast.loading('Exporting extracted cell comments...', { id: 'export-comments' });
+      const rows = comments.map(c => ({
+        'Worksheet': c.worksheetName,
+        'Cell Address': c.cellAddress,
+        'Row': c.rowNumber || '',
+        'Column': c.colLetter || '',
+        'Related Field': c.relatedField || '',
+        'Original Cell Value': c.originalCellValue != null ? String(c.originalCellValue) : '',
+        'Comment Text': c.originalCommentText,
+        'Author': c.commentAuthor || 'Unknown',
+        'Timestamp': c.commentTimestamp ? new Date(c.commentTimestamp).toLocaleString('en-IN') : '',
+        'Admission No': c.admissionNo || '',
+        'Student Name': c.studentName || '',
+        'Detected Receipt No': c.suggestedFieldMapping?.detectedReceiptNo || '',
+        'Detected Txn ID': c.suggestedFieldMapping?.detectedTxnId || '',
+        'Detected Amount': c.suggestedFieldMapping?.detectedAmount != null ? c.suggestedFieldMapping.detectedAmount : '',
+        'Detected Mode': c.suggestedFieldMapping?.detectedPaymentMode || '',
+        'Verification Status': c.verificationStatus || 'unverified'
+      }));
+
+      const headers = Object.keys(rows[0]);
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => headers.map(h => `"${String(row[h] || '').replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `excel_cell_comments_${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Comments exported to CSV/Excel successfully', { id: 'export-comments' });
+    } catch (err) {
+      toast.error('Failed to export comments', { id: 'export-comments' });
+    }
+  };
 
   // Download Sample Template
   const handleDownloadTemplate = async () => {
@@ -769,6 +834,270 @@ export default function ImportStudentsPage() {
               </div>
             </div>
 
+            {/* Requirement 2: Excel Comments & Transaction References Section */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                    <MessageSquare className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                      <span>Excel Comments & Transaction References</span>
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 font-bold">
+                        {(previewData.extractedComments || []).length} Extracted
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Cell notes and threaded comments preserved exactly as authored without discarding payment remarks or references.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleExportComments}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                    title="Export all extracted comments and transaction notes into Excel (.csv/.xlsx)"
+                  >
+                    <Download className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Export Comments</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Comments Summary KPIs */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 text-xs">
+                  <span className="text-[10.5px] font-semibold text-slate-500 uppercase block">Total Comments</span>
+                  <span className="text-xl font-bold font-mono text-slate-800 mt-0.5 block">
+                    {previewData.commentsSummary?.totalCommentsExtracted || (previewData.extractedComments || []).length}
+                  </span>
+                  <span className="text-[10px] text-slate-400">All cell notes found</span>
+                </div>
+
+                <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/60 text-xs">
+                  <span className="text-[10.5px] font-semibold text-emerald-700 uppercase block">Receipt / Txn References</span>
+                  <span className="text-xl font-bold font-mono text-emerald-800 mt-0.5 block">
+                    {previewData.commentsSummary?.totalReferencesIdentified || (previewData.extractedComments || []).filter(c => c.hasReference).length}
+                  </span>
+                  <span className="text-[10px] text-emerald-600">Vouchers / UTRs identified</span>
+                </div>
+
+                <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200/60 text-xs">
+                  <span className="text-[10.5px] font-semibold text-amber-700 uppercase block">Unverified References</span>
+                  <span className="text-xl font-bold font-mono text-amber-800 mt-0.5 block">
+                    {previewData.commentsSummary?.unverifiedReferences || (previewData.extractedComments || []).filter(c => c.hasReference && c.verificationStatus !== 'verified' && c.verificationStatus !== 'mapped').length}
+                  </span>
+                  <span className="text-[10px] text-amber-600">Pending admin review</span>
+                </div>
+
+                <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-200/60 text-xs">
+                  <span className="text-[10.5px] font-semibold text-blue-700 uppercase block">General Remarks</span>
+                  <span className="text-xl font-bold font-mono text-blue-800 mt-0.5 block">
+                    {previewData.commentsSummary?.unmappedComments || (previewData.extractedComments || []).filter(c => !c.hasReference).length}
+                  </span>
+                  <span className="text-[10px] text-blue-600">Informational notes</span>
+                </div>
+              </div>
+
+              {/* Filters Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+                <div className="flex flex-wrap items-center gap-2 flex-1">
+                  <div className="relative min-w-[200px] flex-1 max-w-xs">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                    <input
+                      type="text"
+                      value={commentSearch}
+                      onChange={e => setCommentSearch(e.target.value)}
+                      placeholder="Search comment text, author, receipt..."
+                      className="w-full pl-8 pr-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <select
+                    value={commentWorksheetFilter}
+                    onChange={e => setCommentWorksheetFilter(e.target.value)}
+                    className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none"
+                  >
+                    <option value="All">All Worksheets</option>
+                    {Array.from(new Set((previewData.extractedComments || []).map(c => c.worksheetName).filter(Boolean))).map(ws => (
+                      <option key={ws} value={ws}>{ws}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={commentStatusFilter}
+                    onChange={e => setCommentStatusFilter(e.target.value)}
+                    className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 outline-none"
+                  >
+                    <option value="All">All Comment Types</option>
+                    <option value="with_ref">With Payment / Receipt Ref</option>
+                    <option value="notes_only">General Notes Only</option>
+                  </select>
+                </div>
+
+                {(commentSearch || commentWorksheetFilter !== 'All' || commentStatusFilter !== 'All') && (
+                  <button
+                    onClick={() => {
+                      setCommentSearch('');
+                      setCommentWorksheetFilter('All');
+                      setCommentStatusFilter('All');
+                    }}
+                    className="text-xs text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
+                  >
+                    Clear Filter
+                  </button>
+                )}
+              </div>
+
+              {/* Comments Table */}
+              <div className="overflow-x-auto border border-slate-200/80 rounded-xl">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200/80 text-[10.5px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="py-2.5 px-3">Sheet</th>
+                      <th className="py-2.5 px-3">Cell</th>
+                      <th className="py-2.5 px-3">Field</th>
+                      <th className="py-2.5 px-3">Cell Value</th>
+                      <th className="py-2.5 px-3">Student Match</th>
+                      <th className="py-2.5 px-4 min-w-[240px]">Original Comment Text</th>
+                      <th className="py-2.5 px-3">Author & Date</th>
+                      <th className="py-2.5 px-3">Identified Transaction Ref</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                      <th className="py-2.5 px-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(previewData.extractedComments || [])
+                      .filter(c => {
+                        if (commentWorksheetFilter !== 'All' && c.worksheetName !== commentWorksheetFilter) return false;
+                        if (commentStatusFilter === 'with_ref' && !c.hasReference) return false;
+                        if (commentStatusFilter === 'notes_only' && c.hasReference) return false;
+                        if (commentSearch.trim()) {
+                          const q = commentSearch.toLowerCase();
+                          const matchText = (c.originalCommentText || '').toLowerCase().includes(q);
+                          const matchAuthor = (c.commentAuthor || '').toLowerCase().includes(q);
+                          const matchCell = (c.cellAddress || '').toLowerCase().includes(q);
+                          const matchReceipt = (c.suggestedFieldMapping?.detectedReceiptNo || '').toLowerCase().includes(q);
+                          const matchTxn = (c.suggestedFieldMapping?.detectedTxnId || '').toLowerCase().includes(q);
+                          const matchAdm = (c.admissionNo || '').toLowerCase().includes(q);
+                          const matchName = (c.studentName || '').toLowerCase().includes(q);
+                          return matchText || matchAuthor || matchCell || matchReceipt || matchTxn || matchAdm || matchName;
+                        }
+                        return true;
+                      })
+                      .map((c, idx) => {
+                        const cellKey = `${c.worksheetName}-${c.cellAddress}-${idx}`;
+                        const isCopied = copiedCell === cellKey;
+                        const sm = c.suggestedFieldMapping || {};
+
+                        return (
+                          <tr key={cellKey} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-2.5 px-3 font-semibold text-slate-700 whitespace-nowrap">
+                              {c.worksheetName}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-blue-700 whitespace-nowrap">
+                              {c.cellAddress}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
+                              {c.relatedField || <span className="text-slate-300">—</span>}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-slate-800 whitespace-nowrap">
+                              {c.originalCellValue != null && c.originalCellValue !== '' ? String(c.originalCellValue) : <span className="text-slate-300 font-sans italic">blank</span>}
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              {c.admissionNo ? (
+                                <div>
+                                  <span className="font-mono font-bold text-slate-800 block text-[11px]">{c.admissionNo}</span>
+                                  {c.studentName && <span className="text-slate-500 text-[10px] block">{c.studentName}</span>}
+                                </div>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-4 text-slate-800">
+                              <div className="flex items-start justify-between gap-2 group">
+                                <p className="leading-relaxed whitespace-pre-wrap font-sans text-xs select-text">
+                                  {c.originalCommentText}
+                                </p>
+                                <button
+                                  onClick={() => handleCopyComment(c.originalCommentText, cellKey)}
+                                  className="text-slate-400 hover:text-slate-700 p-1 rounded hover:bg-slate-100 shrink-0 cursor-pointer"
+                                  title="Copy comment text"
+                                >
+                                  {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              <span className="text-slate-700 font-medium block text-[11px]">{c.commentAuthor || 'Author'}</span>
+                              {c.commentTimestamp && (
+                                <span className="text-[10px] text-slate-400 font-mono block">
+                                  {new Date(c.commentTimestamp).toLocaleDateString('en-IN')}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              {c.hasReference ? (
+                                <div className="space-y-0.5">
+                                  {sm.detectedReceiptNo && (
+                                    <span className="inline-block px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10.5px] font-mono font-bold block">
+                                      Receipt: {sm.detectedReceiptNo}
+                                    </span>
+                                  )}
+                                  {sm.detectedTxnId && (
+                                    <span className="inline-block px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10.5px] font-mono font-bold block">
+                                      Txn: {sm.detectedTxnId}
+                                    </span>
+                                  )}
+                                  {sm.detectedAmount != null && (
+                                    <span className="text-[10px] text-slate-600 font-mono block">
+                                      Amount: {formatCurrency(sm.detectedAmount)}
+                                    </span>
+                                  )}
+                                  {sm.detectedPaymentMode && (
+                                    <span className="text-[10px] text-slate-500 block">
+                                      Mode: {sm.detectedPaymentMode}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-[11px] italic">No transaction detected</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10.5px] font-bold ${
+                                c.hasReference
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {c.hasReference ? 'Unverified Ref' : 'Note'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => handleCopyComment(c.originalCommentText, cellKey)}
+                                className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold px-2 py-1 rounded hover:bg-blue-50 cursor-pointer inline-flex items-center gap-1"
+                              >
+                                {isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                                <span>{isCopied ? 'Copied' : 'Copy'}</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+
+                {(previewData.extractedComments || []).length === 0 && (
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    No cell comments or notes were found in this Excel workbook.
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Bottom Actions Bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
               <div className="text-xs text-slate-600">
@@ -823,7 +1152,7 @@ export default function ImportStudentsPage() {
               </div>
 
               {/* Statistics Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-left">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-left">
                 <div className="p-3.5 bg-emerald-50/50 rounded-2xl border border-emerald-100">
                   <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Inserted</p>
                   <p className="text-2xl font-bold text-emerald-800 font-mono mt-0.5">{importResult.insertedCount}</p>
@@ -846,6 +1175,12 @@ export default function ImportStudentsPage() {
                   <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Fee Demands</p>
                   <p className="text-2xl font-bold text-blue-800 font-mono mt-0.5">{importResult.feeDemandsCreated}</p>
                   <p className="text-[10px] text-blue-600">Assessed from catalog</p>
+                </div>
+
+                <div className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-100 col-span-2 sm:col-span-1">
+                  <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Comments Preserved</p>
+                  <p className="text-2xl font-bold text-indigo-800 font-mono mt-0.5">{importResult.commentsImportedCount || 0}</p>
+                  <p className="text-[10px] text-indigo-600">Saved to audit database</p>
                 </div>
               </div>
 

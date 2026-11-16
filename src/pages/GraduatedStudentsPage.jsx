@@ -10,7 +10,7 @@ import {
   BookOpen, Calendar, Eye, CreditCard, ChevronRight, Download,
   CheckCircle2, AlertTriangle, X, ShieldCheck, Sparkles, Layers,
   ExternalLink, FileText, ArrowRight, UserCheck, Phone, Printer,
-  MessageSquare, FileSpreadsheet, Check
+  MessageSquare, FileSpreadsheet, Check, Zap
 } from 'lucide-react';
 import { formatCurrency, formatDate, getStatusColor } from '../utils/helpers';
 import { pageVariants, fadeInUp, modalVariants, backdropVariants } from '../utils/animations';
@@ -402,6 +402,28 @@ export default function GraduatedStudentsPage() {
       toast.error(err.response?.data?.message || 'Failed to bulk graduate students');
     } finally {
       setBulkSubmitting(false);
+    }
+  };
+
+  const pastDueCandidates = useMemo(() => {
+    const cYear = new Date().getFullYear();
+    return (Array.isArray(suggestions) ? suggestions : []).filter(s => s && s.suggestedPassingYear && s.suggestedPassingYear <= cYear);
+  }, [suggestions]);
+
+  const handleAutoGraduatePastDue = async () => {
+    if (!window.confirm(`Auto-graduate all ${pastDueCandidates.length} past-due students whose course duration has completed? Their graduation passing years will be set automatically and all fee dues will remain intact.`)) {
+      return;
+    }
+    setSuggestionsLoading(true);
+    try {
+      const res = await api.post('/students/auto-graduate-past-due');
+      toast.success(res.data.message || `Successfully auto-graduated ${res.data.count || 0} students!`);
+      fetchSuggestions();
+      fetchGraduated();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to auto-graduate past batches');
+    } finally {
+      setSuggestionsLoading(false);
     }
   };
 
@@ -1168,8 +1190,20 @@ export default function GraduatedStudentsPage() {
                   </button>
                 </div>
               ) : (
-                <div className="text-xs text-slate-500 font-medium self-center">
-                  Showing {filteredSuggestions.length} eligible candidates
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xs text-slate-500 font-medium">
+                    {filteredSuggestions.length} eligible candidates
+                  </span>
+                  {pastDueCandidates.length > 0 && (
+                    <button
+                      onClick={handleAutoGraduatePastDue}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                      title="Automatically graduate all students whose course duration has completed"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Auto-Graduate Past Batches ({pastDueCandidates.length})</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
